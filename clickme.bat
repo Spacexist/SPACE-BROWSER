@@ -2,6 +2,6 @@
 setlocal
 cd /d "%~dp0"
 
-start "" "index.html"
+start "" "ui/index.html"
 
 endlocal

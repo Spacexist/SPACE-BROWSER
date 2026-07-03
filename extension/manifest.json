@@ -28,6 +28,13 @@
       "js": ["content.js"],
       "all_frames": true,
       "run_at": "document_start"
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["main-world-patches.js"],
+      "all_frames": true,
+      "run_at": "document_start",
+      "world": "MAIN"
     }
   ]
 }
