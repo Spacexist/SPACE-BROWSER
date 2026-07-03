@@ -1,0 +1,669 @@
+:root {
+  --bg: #141414;
+  --panel: #1e1e1e;
+  --card-bg: #1a1a1a;
+  --border: rgba(255, 255, 255, 0.08);
+  --accent: #ffffff;
+  --accent-hover: #e3e3e3;
+  --accent-glow: rgba(255, 255, 255, 0.08);
+  --text: #e3e3e3;
+  --muted: #8e8e8e;
+  --danger: #ff5568;
+  --active-blue: #007acc;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+#viewport {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  user-select: none;
+  background: var(--bg);
+}
+
+#dot-grid {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+#world {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+
+#world * {
+  pointer-events: auto;
+}
+
+/* Floating Toolbar (Codex Pill Style) */
+.floating-toolbar {
+  position: absolute;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  z-index: 100;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.floating-toolbar:hover {
+  border-color: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+}
+
+.toolbar-btn {
+  background: transparent;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-weight: 500;
+  font-size: 13px;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.toolbar-btn:hover {
+  color: #000000;
+  background: var(--accent);
+}
+
+.toolbar-btn:active {
+  transform: scale(0.97);
+}
+
+.toolbar-btn.secondary {
+  color: var(--muted);
+  background: transparent;
+}
+
+.toolbar-btn.secondary:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.zoom-label {
+  color: var(--accent);
+  font-family: ui-monospace, SFMono-Regular, SF Pro Text, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  font-weight: 500;
+  min-width: 60px;
+  text-align: center;
+  padding: 0 4px;
+}
+
+.divider {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  margin: 0 4px;
+}
+
+/* Draggable Cards (Codex Card Style) */
+.card-item {
+  position: absolute;
+  width: 320px;
+  height: 240px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 32px; /* iOS Rounding for all cards */
+  padding: 20px 20px 24px 20px; /* dedicated 24px bottom bezel space */
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  cursor: default;
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+  user-select: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card-item:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5);
+}
+
+.card-item.dragging {
+  border-color: rgba(255, 255, 255, 0.35);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.6);
+  transform: scale(1.015) translateY(-2px);
+  cursor: grabbing;
+  z-index: 1000;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.card-tag {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.card-close {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 16px;
+  cursor: pointer;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  transition: all 0.15s;
+}
+
+.card-close:hover {
+  background: rgba(255, 85, 104, 0.1);
+  color: var(--danger);
+}
+
+.card-item h3 {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #ffffff;
+  outline: none;
+  line-height: 1.4;
+}
+
+.card-item p {
+  font-size: 13px;
+  color: #adadad;
+  line-height: 1.6;
+  outline: none;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden; /* Prevent horizontal scrollbars */
+}
+
+/* Image Card Style (Draggable/Resizable image widget) */
+.card-item.image-card {
+  width: 400px;
+  height: 300px;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 16px 24px 16px; /* dedicated 24px bottom bezel space */
+  gap: 10px;
+  border-radius: 32px;
+}
+
+.image-wrapper {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 18px; /* Concentric corner inside 32px outer */
+  background: #121212;
+  position: relative;
+}
+
+.card-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+/* Excel Card Style (Parsed Spreadsheet widget) */
+.card-item.excel-card {
+  width: 600px;
+  height: 400px;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 16px 24px 16px; /* dedicated 24px bottom bezel space */
+  gap: 10px;
+  border-radius: 32px;
+}
+
+.excel-wrapper, .page-excel-container {
+  flex: 1;
+  overflow: auto;
+  border-radius: 18px;
+  background: #181818;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.excel-sheet-name {
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.7);
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+/* Beautiful dark mode spreadsheet table styling */
+.excel-table-container table, .page-excel-container table {
+  border-collapse: collapse;
+  width: max-content;
+  min-width: 100%;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 12px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.excel-table-container th, .page-excel-container th,
+.excel-table-container td, .page-excel-container td {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 6px 12px;
+  min-width: 80px;
+  text-align: left;
+}
+
+.excel-table-container tr:first-child th,
+.page-excel-container tr:first-child th,
+.excel-table-container tr:first-child td,
+.page-excel-container tr:first-child td {
+  background: #252525;
+  color: #ffffff;
+  font-weight: 600;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.15);
+}
+
+.excel-table-container tr:hover, .page-excel-container tr:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* Page Card Style (URL Embed Card with iPhone Rounding) */
+.card-item.page-card {
+  width: 1200px;
+  height: 800px;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 16px 24px 16px; /* dedicated 24px bottom bezel space */
+  gap: 10px;
+  border-radius: 32px; /* iPhone rounded corners style */
+}
+
+.page-header-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.page-input {
+  flex: 1;
+  background: #101010;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: #ffffff;
+  font-size: 12px;
+  padding: 6px 12px;
+  outline: none;
+  font-family: ui-monospace, monospace;
+}
+
+.page-input:focus {
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.page-btn {
+  background: #252525;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: #ffffff;
+  font-size: 12px;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.page-btn:hover {
+  background: #333333;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.iframe-wrapper {
+  position: relative;
+  flex: 1;
+  border-radius: 18px; /* Concentric rounded corner to match outer 32px radius */
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: #ffffff;
+}
+
+.page-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: #ffffff;
+}
+
+.iframe-cover {
+  position: absolute;
+  inset: 0;
+  background: rgba(20, 20, 20, 0.4);
+  backdrop-filter: blur(2px);
+  z-index: 10;
+  cursor: grab;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease, backdrop-filter 0.3s ease;
+}
+
+/* If active interactive mode, hide cover to allow clicks on iframe */
+.card-item.page-card.interactive .iframe-cover {
+  display: none !important;
+}
+
+/* Show cover when card is frozen and has loaded an iframe */
+.card-item.page-card.has-iframe:not(.interactive) .iframe-cover {
+  opacity: 1;
+  pointer-events: auto;
+  backdrop-filter: blur(3px);
+  background: rgba(20, 20, 20, 0.45);
+}
+
+/* Visual style of iframe when frozen */
+.card-item.page-card:not(.interactive) .page-iframe {
+  filter: blur(0.6px);
+  opacity: 0.85;
+  transition: filter 0.3s ease, opacity 0.3s ease;
+}
+
+/* Sharp iframe when active */
+.card-item.page-card.interactive .page-iframe {
+  filter: none;
+  opacity: 1;
+}
+
+/* Frost overlay text/icon */
+.iframe-freeze-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 13px;
+  background: rgba(30, 30, 30, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 10px 18px;
+  border-radius: 20px;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(10px);
+  transform: translateY(10px);
+  opacity: 0;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;
+}
+
+.card-item.page-card.has-iframe:not(.interactive) .iframe-freeze-indicator {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+/* Hover effect on cover to make it feel responsive */
+.card-item.page-card.has-iframe:not(.interactive):hover .iframe-freeze-indicator {
+  background: rgba(40, 40, 40, 0.95);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.25);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.6);
+}
+
+/* Force show covers globally when zooming or panning canvas or dragging elements */
+#viewport.panning .iframe-cover,
+#viewport.dragging-card .iframe-cover {
+  display: block !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  cursor: grabbing !important;
+  background: transparent !important;
+  backdrop-filter: none !important;
+}
+
+#viewport.panning .iframe-freeze-indicator,
+#viewport.dragging-card .iframe-freeze-indicator {
+  display: none !important;
+}
+
+.iframe-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #181818;
+  color: var(--muted);
+  gap: 12px;
+  text-align: center;
+  padding: 24px;
+}
+
+.iframe-empty span {
+  font-size: 12px;
+  line-height: 1.6;
+  max-width: 320px;
+}
+
+.iframe-empty code {
+  background: #111;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* Interactive Tips Panel (Codex Minimalist style) */
+.tips-panel {
+  position: absolute;
+  bottom: 24px;
+  left: 24px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 18px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.75;
+  pointer-events: none;
+  z-index: 100;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+
+.tips-panel span {
+  display: block;
+}
+
+.tips-panel b {
+  color: #ffffff;
+  font-weight: 500;
+}
+
+/* Toast Message */
+.toast {
+  position: absolute;
+  bottom: 24px;
+  right: 24px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 20px;
+  font-size: 12px;
+  color: var(--text);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  z-index: 200;
+  transform: translateY(100px);
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.toast.is-visible {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.toast.error {
+  border-color: rgba(255, 85, 104, 0.3);
+  color: #ff8896;
+}
+
+/* Page Card Resize Handles (White Arc Design - Floating Bracket Style) */
+.resize-handle {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  background: transparent;
+  z-index: 100;
+  opacity: 0.15;
+  transition: opacity 0.2s, border-color 0.2s;
+}
+
+.card-item:hover .resize-handle {
+  opacity: 0.65;
+}
+
+.resize-handle:hover {
+  opacity: 1.0 !important;
+}
+
+.resize-tl {
+  top: -8px;
+  left: -8px;
+  border-top: 2px solid #ffffff;
+  border-left: 2px solid #ffffff;
+  border-top-left-radius: 22px;
+  cursor: nwse-resize;
+}
+
+.resize-tr {
+  top: -8px;
+  right: -8px;
+  border-top: 2px solid #ffffff;
+  border-right: 2px solid #ffffff;
+  border-top-right-radius: 22px;
+  cursor: nesw-resize;
+}
+
+.resize-bl {
+  bottom: -8px;
+  left: -8px;
+  border-bottom: 2px solid #ffffff;
+  border-left: 2px solid #ffffff;
+  border-bottom-left-radius: 22px;
+  cursor: nesw-resize;
+}
+
+.resize-br {
+  bottom: -8px;
+  right: -8px;
+  border-bottom: 2px solid #ffffff;
+  border-right: 2px solid #ffffff;
+  border-bottom-right-radius: 22px;
+  cursor: nwse-resize;
+}
+
+/* Page Mode Indicator */
+.page-mode-indicator {
+  font-size: 10px;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.card-item.page-card.interactive .page-mode-indicator {
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Bottom iPhone Drag Handle */
+.page-drag-handle-wrapper {
+  position: absolute;
+  bottom: 2px;
+  left: 0;
+  width: 100%;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  z-index: 50;
+}
+
+.page-drag-bar {
+  width: 130px;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 3px;
+  transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.page-drag-handle-wrapper:hover .page-drag-bar {
+  background: rgba(255, 255, 255, 0.65);
+  width: 160px;
+}
+
+.card-item.dragging .page-drag-bar {
+  background: #ffffff;
+  width: 180px;
+}
+
+.page-drag-handle-wrapper:active {
+  cursor: grabbing;
+}
+
+/* Focused Note Card Glow style */
+.card-item.focused-note {
+  border-color: rgba(255, 255, 255, 0.45);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65);
+}

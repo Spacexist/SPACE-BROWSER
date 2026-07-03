@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>自由画布 · 无限坐标平面</title>
+  <link rel="stylesheet" href="index.css">
+  <!-- Load SheetJS for local Excel parsing and rendering -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+  
+  <div id="viewport">
+    <!-- Dynamic Dot Grid Background -->
+    <canvas id="dot-grid"></canvas>
+    
+    <!-- Infinite World coordinates container -->
+    <div id="world"></div>
+    
+    <!-- Floating Toolbar -->
+    <div class="floating-toolbar">
+      <button class="toolbar-btn" id="btn-add-card">
+        <span>+</span>新建想法
+      </button>
+      <button class="toolbar-btn" id="btn-add-page">
+        <span>🌐</span>新建网页
+      </button>
+      <button class="toolbar-btn" id="btn-add-image">
+        <span>🖼️</span>导入图片/文件
+      </button>
+      <input type="file" id="image-loader" accept="image/png, image/jpeg, image/jpg, .xlsx, .xls, .html, .htm" style="display: none;">
+      <div class="divider"></div>
+      <button class="toolbar-btn secondary" id="btn-zoom-out" title="缩小画布">-</button>
+      <span class="zoom-label" id="zoom-label">100%</span>
+      <button class="toolbar-btn secondary" id="btn-zoom-in" title="放大画布">+</button>
+      <div class="divider"></div>
+      <button class="toolbar-btn secondary" id="btn-reset-view">自适应居中</button>
+    </div>
+
+    <!-- Interactive Tips Panel -->
+    <div class="tips-panel">
+      <span><b>左键按住画布 / 中键拖拽 / 空格+左键</b>：平移画布</span>
+      <span><b>滚轮滚动</b>：以鼠标指针为中心平滑缩放</span>
+      <span><b>双击画布空白处</b>：在指针位置新建便签</span>
+      <span><b>鼠标移至卡片上并按下 F 键</b>：聚焦放大该目标</span>
+      <span><b>按住卡片主体</b>：拖动以改变其空间坐标</span>
+      <span><b>点击卡片内文本</b>：直接双击或选中以编辑</span>
+    </div>
+
+    <!-- Floating Toast Notice -->
+    <div class="toast" id="toast"></div>
+  </div>
+
+  <script src="index.js"></script>
+</body>
+</html>
