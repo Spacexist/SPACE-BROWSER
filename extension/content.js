@@ -19,11 +19,12 @@
     }
   }, true);
 
-  // 3. Monkeypatch window.open inside the page's main world context to direct popups internally
+  // 3. Inject JS patches into the page's main world context
   try {
     const script = document.createElement('script');
     script.textContent = `
       (function() {
+        // A. Monkeypatch window.open to redirect popups internally
         const originalOpen = window.open;
         window.open = function(url, target, features) {
           if (!url) return null;
@@ -38,11 +39,45 @@
             return window;
           }
         };
+
+        // B. Bypass frame-busting scripts by redefining window.top and window.parent.
+        // Only return window.self if the parent is cross-origin (avoids breaking same-origin sub-frames).
+        try {
+          Object.defineProperty(window, 'top', {
+            get: function() {
+              try {
+                if (window.self.location.href && window.top.location.href) {
+                  return window.top;
+                }
+              } catch(e) {
+                // Cross-origin top window (e.g. our file:/// canvas)
+              }
+              return window.self;
+            },
+            configurable: true
+          });
+
+          Object.defineProperty(window, 'parent', {
+            get: function() {
+              try {
+                if (window.self.location.href && window.parent.location.href) {
+                  return window.parent;
+                }
+              } catch(e) {
+                // Cross-origin parent
+              }
+              return window.self;
+            },
+            configurable: true
+          });
+        } catch (err) {
+          console.warn("SPACE-BROWSER: Failed to define top/parent properties:", err);
+        }
       })();
     `;
     (document.head || document.documentElement).appendChild(script);
     script.remove();
   } catch (err) {
-    console.error('Failed to inject window.open proxy:', err);
+    console.error('SPACE-BROWSER: Failed to inject main world patches:', err);
   }
 })();
