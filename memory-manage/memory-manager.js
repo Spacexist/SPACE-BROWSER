@@ -239,7 +239,6 @@
     queuePageCardSleep(card);
   }
 
-  const viewportElement = document.getElementById("viewport");
   const pageObserver = new IntersectionObserver(entries => {
     entries.forEach(entry => {
       const cardId = Number(entry.target.dataset.id);
@@ -257,7 +256,6 @@
       }
     });
   }, {
-    root: viewportElement,
     rootMargin: `${PRELOAD_MARGIN_PX}px`,
     threshold: 0
   });
