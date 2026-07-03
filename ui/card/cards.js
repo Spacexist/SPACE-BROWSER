@@ -561,8 +561,22 @@ function loadCanvasState() {
   try {
     const state = JSON.parse(raw);
     
-    // Clear existing/default cards
+    // Clear existing/default cards cleanly
     cardsList.forEach(card => {
+      if (typeof releaseCardFromFocusManager === "function") {
+        releaseCardFromFocusManager(card);
+      }
+      if (card.type === "page") {
+        if (typeof unregisterPageCardMemory === "function") {
+          unregisterPageCardMemory(card);
+        }
+        if (card.objectUrl) {
+          URL.revokeObjectURL(card.objectUrl);
+        }
+        if (typeof destroyPageCardIframe === "function") {
+          destroyPageCardIframe(card);
+        }
+      }
       card.element.remove();
     });
     cardsList = [];
