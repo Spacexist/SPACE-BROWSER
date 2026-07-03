@@ -4,8 +4,12 @@
   "version": "1.0.0",
   "description": "解除 iframe 嵌入限制（X-Frame-Options 和 CSP），并强制链接在当前框架中打开",
   "permissions": [
-    "declarativeNetRequest"
+    "declarativeNetRequest",
+    "cookies"
   ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "host_permissions": [
     "<all_urls>"
   ],

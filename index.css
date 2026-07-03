@@ -74,12 +74,61 @@ html, body {
   gap: 6px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
   z-index: 100;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: border-color 0.2s, box-shadow 0.2s, top 0.4s cubic-bezier(0.16, 1, 0.3, 1), transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .floating-toolbar:hover {
   border-color: rgba(255, 255, 255, 0.15);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+}
+
+/* Collapsed State: slide up out of viewport, leaving only the bottom lip */
+.floating-toolbar.collapsed {
+  top: 0;
+  transform: translate(-50%, -100%) translateY(8px);
+}
+
+/* Toolbar toggle tab */
+.toolbar-toggle {
+  position: absolute;
+  bottom: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 44px;
+  height: 18px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+  transition: background-color 0.2s, border-color 0.2s;
+}
+
+.floating-toolbar.collapsed .toolbar-toggle {
+  background: rgba(20, 20, 20, 0.75);
+  backdrop-filter: blur(10px);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.toolbar-toggle:hover {
+  background: #252525;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.toggle-icon {
+  font-size: 8px;
+  color: var(--muted);
+  transition: transform 0.3s ease;
+  line-height: 1;
+}
+
+.floating-toolbar.collapsed .toggle-icon {
+  transform: rotate(180deg);
 }
 
 .toolbar-btn {
@@ -364,6 +413,32 @@ html, body {
   border-color: rgba(255, 255, 255, 0.2);
 }
 
+.page-nav-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text);
+  border-radius: 8px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+  user-select: none;
+}
+
+.page-nav-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.page-nav-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 .iframe-wrapper {
   position: relative;
   flex: 1;
@@ -371,6 +446,8 @@ html, body {
   overflow: hidden;
   border: 1px solid var(--border);
   background: #ffffff;
+  -webkit-perspective: 1000;
+  backface-visibility: hidden;
 }
 
 .page-iframe {
@@ -378,6 +455,13 @@ html, body {
   height: 100%;
   border: none;
   background: #ffffff;
+  /* Optimize rendering sharpness for text and assets under scaling */
+  -webkit-font-smoothing: subpixel-antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  image-rendering: -webkit-optimize-contrast;
+  backface-visibility: hidden;
+  transform: translateZ(0);
 }
 
 .iframe-cover {
@@ -409,18 +493,6 @@ html, body {
   background: rgba(20, 20, 20, 0.45);
 }
 
-/* Visual style of iframe when frozen */
-.card-item.page-card:not(.interactive) .page-iframe {
-  filter: blur(0.6px);
-  opacity: 0.85;
-  transition: filter 0.3s ease, opacity 0.3s ease;
-}
-
-/* Sharp iframe when active */
-.card-item.page-card.interactive .page-iframe {
-  filter: none;
-  opacity: 1;
-}
 
 /* Frost overlay text/icon */
 .iframe-freeze-indicator {
@@ -505,14 +577,108 @@ html, body {
   left: 24px;
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 14px 18px;
-  font-size: 12px;
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  font-size: 11px;
   color: var(--muted);
-  line-height: 1.75;
+  line-height: 1.6;
+  max-width: 320px;
+  z-index: 1000;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+  width: auto;
+  height: auto;
+}
+
+/* Collapsed State: circular "?" badge */
+.tips-panel.collapsed {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  padding: 0;
+  cursor: pointer;
+  background: rgba(20, 20, 20, 0.7);
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.tips-panel.collapsed:hover {
+  background: rgba(40, 40, 40, 0.9);
+  border-color: rgba(255, 255, 255, 0.25);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+  transform: translateY(-2px);
+}
+
+/* Toggle Badge Button */
+.tips-toggle {
+  display: none;
+  font-weight: bold;
+  font-size: 15px;
+  color: #ffffff;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+}
+
+.tips-panel.collapsed .tips-toggle {
+  display: flex;
+}
+
+/* Panel Content Container */
+.tips-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  opacity: 1;
+  pointer-events: auto;
+  transition: opacity 0.3s ease;
+  width: 288px; /* Fixed content width to prevent resizing glitch during transition */
+}
+
+.tips-panel.collapsed .tips-content {
+  opacity: 0;
   pointer-events: none;
-  z-index: 100;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+/* Header Row inside Tips */
+.tips-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 6px;
+  margin-bottom: 4px;
+}
+
+/* Close/Collapse Button */
+.tips-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 18px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.tips-close-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .tips-panel span {

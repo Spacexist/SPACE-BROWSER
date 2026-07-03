@@ -18,7 +18,8 @@
     <div id="world"></div>
     
     <!-- Floating Toolbar -->
-    <div class="floating-toolbar">
+    <!-- Floating Toolbar -->
+    <div class="floating-toolbar" id="floating-toolbar">
       <button class="toolbar-btn" id="btn-add-card">
         <span>+</span>新建想法
       </button>
@@ -35,16 +36,28 @@
       <button class="toolbar-btn secondary" id="btn-zoom-in" title="放大画布">+</button>
       <div class="divider"></div>
       <button class="toolbar-btn secondary" id="btn-reset-view">自适应居中</button>
+      
+      <!-- Toggle handle -->
+      <div class="toolbar-toggle" id="toolbar-toggle" title="收起/展开工具栏">
+        <span class="toggle-icon">▲</span>
+      </div>
     </div>
 
     <!-- Interactive Tips Panel -->
-    <div class="tips-panel">
-      <span><b>左键按住画布 / 中键拖拽 / 空格+左键</b>：平移画布</span>
-      <span><b>滚轮滚动</b>：以鼠标指针为中心平滑缩放</span>
-      <span><b>双击画布空白处</b>：在指针位置新建便签</span>
-      <span><b>鼠标移至卡片上并按下 F 键</b>：聚焦放大该目标</span>
-      <span><b>按住卡片主体</b>：拖动以改变其空间坐标</span>
-      <span><b>点击卡片内文本</b>：直接双击或选中以编辑</span>
+    <div class="tips-panel collapsed" id="tips-panel">
+      <div class="tips-toggle" id="tips-toggle" title="快捷键与使用帮助">?</div>
+      <div class="tips-content">
+        <div class="tips-header-row">
+          <span style="font-weight: bold; font-size: 11px; color: #ffffff;">💡 空间画板操作指南</span>
+          <button class="tips-close-btn" id="tips-close-btn" title="收起帮助">×</button>
+        </div>
+        <span><b>左键按住画布 / 中键拖拽 / 空格+左键</b>：平移画布</span>
+        <span><b>滚轮滚动</b>：以鼠标指针为中心平滑缩放</span>
+        <span><b>双击画布空白处</b>：在指针位置新建便签</span>
+        <span><b>鼠标移至卡片上并按下 F 键</b>：聚焦放大该目标</span>
+        <span><b>按住卡片主体</b>：拖动以改变其空间坐标</span>
+        <span><b>点击卡片内文本</b>：直接双击或选中以编辑</span>
+      </div>
     </div>
 
     <!-- Floating Toast Notice -->

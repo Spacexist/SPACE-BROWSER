@@ -569,6 +569,52 @@ window.addEventListener("resize", () => {
   scheduleDotGrid();
 });
 
+window.addEventListener("message", event => {
+  if (event.data && event.data.source === "SPACE_PAGE_NAVIGATED") {
+    const iframeSrc = event.data.url;
+    const sender = event.source;
+    
+    // Find the card where iframeEl.contentWindow === sender
+    const card = cardsList.find(c => {
+      if (c.type !== "page") return false;
+      const iframeEl = c.element.querySelector(".page-iframe");
+      return iframeEl && iframeEl.contentWindow === sender;
+    });
+    
+    if (card) {
+      // Update address bar value dynamically
+      const inputEl = card.element.querySelector(".page-input");
+      if (inputEl && document.activeElement !== inputEl) {
+        inputEl.value = iframeSrc;
+      }
+      card.url = iframeSrc;
+      
+      // Initialize history if missing
+      if (!card.history) {
+        card.history = [];
+        card.historyIndex = -1;
+      }
+      
+      // Synchronize history index or push new state
+      const existingIndex = card.history.indexOf(iframeSrc);
+      if (existingIndex !== -1) {
+        card.historyIndex = existingIndex;
+      } else {
+        // Truncate any forward history and push new URL
+        card.history = card.history.slice(0, card.historyIndex + 1);
+        card.history.push(iframeSrc);
+        card.historyIndex = card.history.length - 1;
+      }
+      
+      // Update UI state of Back button
+      const backBtn = card.element.querySelector(".page-btn-back");
+      if (backBtn) {
+        backBtn.disabled = card.historyIndex <= 0;
+      }
+    }
+  }
+});
+
 // Draggable Cards Layering & Interaction Management
 let maxZIndex = 10;
 function bringToFront(cardElement) {
@@ -777,6 +823,8 @@ function createPageCard(x = 0, y = 0, initialUrl = "", displayName = "") {
   cardElement.innerHTML = `
     <div class="page-header-row">
       <span class="card-tag">Page</span>
+      <button class="page-nav-btn page-btn-back" title="后退" disabled>←</button>
+      <button class="page-nav-btn page-btn-refresh" title="刷新">↻</button>
       <input type="text" class="page-input" placeholder="输入网址 (如 example.com) 或拖入本地 HTML" value="${displayVal}">
       <button class="page-btn page-btn-load" title="载入网页">Go</button>
       <span class="page-mode-indicator">[F] 浏览器模式</span>
@@ -799,6 +847,8 @@ function createPageCard(x = 0, y = 0, initialUrl = "", displayName = "") {
   
   const inputEl = cardElement.querySelector(".page-input");
   const loadBtn = cardElement.querySelector(".page-btn-load");
+  const backBtn = cardElement.querySelector(".page-btn-back");
+  const refreshBtn = cardElement.querySelector(".page-btn-refresh");
   const wrapperEl = cardElement.querySelector(".iframe-wrapper");
   const emptyEl = cardElement.querySelector(".iframe-empty");
   let iframeEl = null;
@@ -811,7 +861,18 @@ function createPageCard(x = 0, y = 0, initialUrl = "", displayName = "") {
   inputEl.disabled = true;
   loadBtn.disabled = true;
   
-  const cardObj = { id, type: "page", url: initialUrl, x, y, width, height, element: cardElement };
+  const cardObj = { 
+    id, 
+    type: "page", 
+    url: initialUrl, 
+    x, 
+    y, 
+    width, 
+    height, 
+    element: cardElement,
+    history: initialUrl ? [initialUrl] : [],
+    historyIndex: initialUrl ? 0 : -1
+  };
   
   cardElement.addEventListener("mouseenter", () => {
     hoveredCard = cardObj;
@@ -825,6 +886,19 @@ function createPageCard(x = 0, y = 0, initialUrl = "", displayName = "") {
     bringToFront(cardElement);
   });
   
+  // Wire up back & refresh buttons
+  backBtn.addEventListener("click", () => {
+    if (iframeEl && cardObj.historyIndex > 0) {
+      iframeEl.contentWindow.postMessage({ source: "SPACE_PAGE_CONTROL", action: "back" }, "*");
+    }
+  });
+
+  refreshBtn.addEventListener("click", () => {
+    if (iframeEl) {
+      iframeEl.contentWindow.postMessage({ source: "SPACE_PAGE_CONTROL", action: "refresh" }, "*");
+    }
+  });
+  
   // Abstracted helpers
   enableCardDragging(cardObj);
   enableCardResizing(cardObj);
@@ -835,6 +909,11 @@ function createPageCard(x = 0, y = 0, initialUrl = "", displayName = "") {
       showToast("请输入网址或本地路径", true);
       return;
     }
+    
+    // Reset history stack for new manual root navigation
+    cardObj.history = [];
+    cardObj.historyIndex = -1;
+    if (backBtn) backBtn.disabled = true;
     
     const isBlobUrl = /^blob:/i.test(url);
     let isLocalFile = false;
@@ -1301,3 +1380,34 @@ function initDemo() {
 
 // Kick off
 initDemo();
+
+// Collapsible Help Panel (Tips Panel)
+(function() {
+  const tipsPanel = document.getElementById("tips-panel");
+  const tipsToggle = document.getElementById("tips-toggle");
+  const tipsCloseBtn = document.getElementById("tips-close-btn");
+
+  if (tipsPanel && tipsToggle && tipsCloseBtn) {
+    tipsToggle.addEventListener("click", () => {
+      tipsPanel.classList.remove("collapsed");
+    });
+
+    tipsCloseBtn.addEventListener("click", event => {
+      event.stopPropagation(); // prevent triggering parent canvas handlers
+      tipsPanel.classList.add("collapsed");
+    });
+  }
+})();
+
+// Collapsible Floating Toolbar
+(function() {
+  const toolbar = document.getElementById("floating-toolbar");
+  const toggle = document.getElementById("toolbar-toggle");
+
+  if (toolbar && toggle) {
+    toggle.addEventListener("click", event => {
+      event.stopPropagation(); // prevent triggering parent canvas handlers
+      toolbar.classList.toggle("collapsed");
+    });
+  }
+})();
