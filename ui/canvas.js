@@ -583,6 +583,42 @@ function initDemo() {
 // Kick off
 initDemo();
 
+// Global Focus Status
+// Observe the same focused-card class that drives each card LED. Keeping this
+// read-only detector here avoids introducing a second focus state machine.
+(function() {
+  const status = document.getElementById("canvas-focus-status");
+  if (!status) return;
+
+  function syncCanvasFocusStatus() {
+    const isFocused = Boolean(world.querySelector(".card-item.focused-card"));
+    const label = isFocused ? "画布已聚焦" : "画布未聚焦";
+
+    status.classList.toggle("is-focused", isFocused);
+    status.setAttribute("aria-label", label);
+    status.title = label;
+  }
+
+  const focusObserver = new MutationObserver(mutations => {
+    const focusMayHaveChanged = mutations.some(mutation =>
+      mutation.type === "childList" ||
+      (mutation.type === "attributes" &&
+        mutation.target.classList.contains("card-item"))
+    );
+
+    if (focusMayHaveChanged) syncCanvasFocusStatus();
+  });
+
+  focusObserver.observe(world, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    attributeFilter: ["class"]
+  });
+
+  syncCanvasFocusStatus();
+})();
+
 // Collapsible Help Panel (Tips Panel)
 (function() {
   const tipsPanel = document.getElementById("tips-panel");
