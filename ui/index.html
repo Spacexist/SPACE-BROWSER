@@ -19,28 +19,30 @@
     <div id="world"></div>
     
     <!-- Floating Toolbar -->
-    <div class="floating-toolbar" id="floating-toolbar">
-      <button class="toolbar-btn" id="btn-add-card">
-        <span>+</span>新建想法
-      </button>
-      <button class="toolbar-btn" id="btn-add-page">
-        <span>🌐</span>新建网页
-      </button>
-      <button class="toolbar-btn" id="btn-add-image">
-        <span>🖼️</span>导入图片/文件
-      </button>
-      <input type="file" id="image-loader" accept="image/png, image/jpeg, image/jpg, .xlsx, .xls, .html, .htm" style="display: none;">
-      <div class="divider"></div>
-      <button class="toolbar-btn secondary" id="btn-zoom-out" title="缩小画布">-</button>
-      <span class="zoom-label" id="zoom-label">100%</span>
-      <button class="toolbar-btn secondary" id="btn-zoom-in" title="放大画布">+</button>
-      <div class="divider"></div>
-      <button class="toolbar-btn secondary" id="btn-reset-view">自适应居中</button>
-      
-      <!-- Toggle handle -->
-      <div class="toolbar-toggle" id="toolbar-toggle" title="收起/展开工具栏">
-        <span class="toggle-icon">▲</span>
+    <div class="floating-toolbar collapsed" id="floating-toolbar">
+      <div class="toolbar-content">
+        <button class="toolbar-btn" id="btn-add-card">
+          <span>+</span>新建想法
+        </button>
+        <button class="toolbar-btn" id="btn-add-page">
+          <span>🌐</span>新建网页
+        </button>
+        <button class="toolbar-btn" id="btn-add-image">
+          <span>🖼️</span>导入图片/文件
+        </button>
+        <input type="file" id="image-loader" accept="image/png, image/jpeg, image/jpg, .xlsx, .xls, .html, .htm" style="display: none;">
+        <div class="divider"></div>
+        <button class="toolbar-btn secondary" id="btn-zoom-out" title="缩小画布">-</button>
+        <span class="zoom-label" id="zoom-label">100%</span>
+        <button class="toolbar-btn secondary" id="btn-zoom-in" title="放大画布">+</button>
+        <div class="divider"></div>
+        <button class="toolbar-btn secondary" id="btn-reset-view">自适应居中</button>
       </div>
+
+      <button class="toolbar-toggle" id="toolbar-toggle" type="button"
+        title="展开工具栏" aria-label="展开工具栏" aria-expanded="false">
+        <span class="toggle-icon" aria-hidden="true">•••</span>
+      </button>
     </div>
 
     <!-- Interactive Tips Panel -->
@@ -64,8 +66,10 @@
     <div class="toast" id="toast"></div>
   </div>
 
+  <script src="../memory-manage/WhiteList.runtime.js"></script>
   <script src="focus-manager.js"></script>
   <script src="cards.js"></script>
+  <script src="../memory-manage/memory-manager.js"></script>
   <script src="canvas.js"></script>
 </body>
 </html>

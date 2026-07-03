@@ -473,6 +473,18 @@
   box-shadow: 0 0 8px #4ade80, 0 0 3px #4ade80;
 }
 
+/* Page Card without loaded iframe (empty state) -> Yellow dot */
+.card-item.page-card:not(.has-iframe) .page-mode-indicator {
+  background: #a16207; /* Dim yellow when idle */
+  box-shadow: none;
+}
+
+.card-item.page-card:not(.has-iframe).focused-card .page-mode-indicator {
+  background: #eab308; /* Bright yellow when focused */
+  opacity: 1;
+  box-shadow: 0 0 8px #eab308, 0 0 3px #eab308;
+}
+
 /* Bottom iPhone Drag Handle */
 .page-drag-handle-wrapper {
   position: absolute;

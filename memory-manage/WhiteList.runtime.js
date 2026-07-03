@@ -1,0 +1,1 @@
+﻿window.__FREE_CANVAS_MEMORY_WHITE_LIST__ = [];

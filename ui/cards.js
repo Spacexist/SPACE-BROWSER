@@ -146,7 +146,7 @@ function createPageCard(x = 0, y = 0, initialUrl = "", displayName = "") {
       <span class="page-mode-indicator"></span>
       <button class="page-nav-btn page-btn-back" title="后退" disabled>←</button>
       <button class="page-nav-btn page-btn-refresh" title="刷新">↻</button>
-      <input type="text" class="page-input" placeholder="输入网址 (如 example.com) 或拖入本地 HTML" value="${displayVal}">
+      <input type="text" class="page-input" placeholder="输入网址 (如 google.com) 或拖入本地 HTML" value="${displayVal}">
       <button class="page-btn page-btn-load" title="载入网页">Go</button>
       <button class="card-close" title="删除卡片">×</button>
     </div>
@@ -171,7 +171,6 @@ function createPageCard(x = 0, y = 0, initialUrl = "", displayName = "") {
   const refreshBtn = cardElement.querySelector(".page-btn-refresh");
   const wrapperEl = cardElement.querySelector(".iframe-wrapper");
   const emptyEl = cardElement.querySelector(".iframe-empty");
-  let iframeEl = null;
   
   if (displayName && initialUrl) {
     inputEl.dataset.actualUrl = initialUrl;
@@ -190,6 +189,10 @@ function createPageCard(x = 0, y = 0, initialUrl = "", displayName = "") {
     width, 
     height, 
     element: cardElement,
+    currentUrl: initialUrl,
+    iframeEl: null,
+    contentKind: initialUrl ? "iframe" : "empty",
+    objectUrl: /^blob:/i.test(initialUrl) ? initialUrl : null,
     history: initialUrl ? [initialUrl] : [],
     historyIndex: initialUrl ? 0 : -1
   };
@@ -208,14 +211,14 @@ function createPageCard(x = 0, y = 0, initialUrl = "", displayName = "") {
   
   // Wire up back & refresh buttons
   backBtn.addEventListener("click", () => {
-    if (iframeEl && cardObj.historyIndex > 0) {
-      iframeEl.contentWindow.postMessage({ source: "SPACE_PAGE_CONTROL", action: "back" }, "*");
+    if (cardObj.iframeEl && cardObj.historyIndex > 0) {
+      cardObj.iframeEl.contentWindow.postMessage({ source: "SPACE_PAGE_CONTROL", action: "back" }, "*");
     }
   });
 
   refreshBtn.addEventListener("click", () => {
-    if (iframeEl) {
-      iframeEl.contentWindow.postMessage({ source: "SPACE_PAGE_CONTROL", action: "refresh" }, "*");
+    if (cardObj.iframeEl) {
+      cardObj.iframeEl.contentWindow.postMessage({ source: "SPACE_PAGE_CONTROL", action: "refresh" }, "*");
     }
   });
   
@@ -228,12 +231,6 @@ function createPageCard(x = 0, y = 0, initialUrl = "", displayName = "") {
       showToast("请输入网址或本地路径", true);
       return;
     }
-    
-    // Revoke old blob URL if it exists to release memory
-    if (cardObj.url && cardObj.url.startsWith("blob:")) {
-      URL.revokeObjectURL(cardObj.url);
-    }
-    cardObj.url = url;
     
     // Reset history stack for new manual root navigation
     cardObj.history = [];
@@ -252,8 +249,17 @@ function createPageCard(x = 0, y = 0, initialUrl = "", displayName = "") {
       url = "https://" + url;
       inputEl.value = url;
     }
-    
-    if (iframeEl) iframeEl.remove();
+
+    // Revoke only the previous local object URL. The manager owns the iframe
+    // node itself so every unload path updates the same state and reference.
+    if (cardObj.objectUrl && cardObj.objectUrl !== url) {
+      URL.revokeObjectURL(cardObj.objectUrl);
+    }
+    cardObj.objectUrl = isBlobUrl ? url : null;
+    cardObj.url = url;
+    cardObj.currentUrl = url;
+
+    destroyPageCardIframe(cardObj);
     cardElement.classList.remove("has-iframe");
     
     // Clear any existing excel container in the page card
@@ -261,6 +267,7 @@ function createPageCard(x = 0, y = 0, initialUrl = "", displayName = "") {
     if (oldExcel) oldExcel.remove();
     
     if (isExcelFile) {
+      cardObj.contentKind = "excel";
       emptyEl.style.display = "none";
       
       const loader = document.createElement("div");
@@ -292,23 +299,9 @@ function createPageCard(x = 0, y = 0, initialUrl = "", displayName = "") {
       return;
     }
     
+    cardObj.contentKind = "iframe";
     emptyEl.style.display = "none";
-    
-    iframeEl = document.createElement("iframe");
-    iframeEl.className = "page-iframe";
-    iframeEl.referrerPolicy = "no-referrer";
-    iframeEl.src = url;
-    
-    // Antialiasing adjustments
-    iframeEl.style.webkitFontSmoothing = "subpixel-antialiased";
-    iframeEl.style.textRendering = "optimizeLegibility";
-    iframeEl.style.imageRendering = "-webkit-optimize-contrast";
-    iframeEl.style.backfaceVisibility = "hidden";
-    iframeEl.style.transform = "translateZ(0)";
-    
-    wrapperEl.insertBefore(iframeEl, wrapperEl.firstChild);
-    cardElement.classList.add("has-iframe");
-    cardObj.isHibernated = false;
+    mountPageCardIframe(cardObj, url, { reason: "load" });
   }
   
   loadBtn.addEventListener("click", loadUrl);
@@ -335,18 +328,14 @@ function createPageCard(x = 0, y = 0, initialUrl = "", displayName = "") {
     cardElement.style.transform = "scale(0.8)";
     cardElement.style.opacity = "0";
     setTimeout(() => {
-      if (cardObj.url && cardObj.url.startsWith("blob:")) {
-        URL.revokeObjectURL(cardObj.url);
+      unregisterPageCardMemory(cardObj);
+      if (cardObj.objectUrl) {
+        URL.revokeObjectURL(cardObj.objectUrl);
+        cardObj.objectUrl = null;
       }
-      if (iframeEl) {
-        iframeEl.src = "about:blank";
-        iframeEl.remove();
-      }
+      destroyPageCardIframe(cardObj);
       cardElement.remove();
       cardsList = cardsList.filter(c => c.id !== id);
-      if (typeof scheduleVisibilityCheck === "function") {
-        scheduleVisibilityCheck();
-      }
     }, 200);
   });
   
@@ -357,6 +346,7 @@ function createPageCard(x = 0, y = 0, initialUrl = "", displayName = "") {
 
   world.appendChild(cardElement);
   cardsList.push(cardObj);
+  registerPageCardMemory(cardObj);
   
   bringToFront(cardElement);
   

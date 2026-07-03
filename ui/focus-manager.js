@@ -115,6 +115,9 @@ function activateCard(card) {
 
   if (card.type !== "page") return;
 
+  if (typeof wakePageCardIframe === "function") {
+    wakePageCardIframe(card);
+  }
   card.element.classList.add("interactive");
   syncPageIframeCover(card.element);
 
@@ -176,14 +179,30 @@ function focusCard(card, isSmooth = true) {
   const zoomX = (viewportWidth - padding * 2) / cardWidth;
   const zoomY = (viewportHeight - padding * 2) / cardHeight;
   const maxZoomLimit = isPage ? 2.5 : 1.2;
-  const targetZoom = Math.min(
+  const fittedZoom = Math.min(
     maxZoomLimit,
     Math.max(0.1, Math.min(zoomX, zoomY))
   );
+  // Cross-origin iframe text is rasterized before the canvas transform is
+  // applied. Near 100%, a small fractional scale is visibly softer than
+  // native browser rendering, so prefer an exact 1:1 focus view.
+  const targetZoom = isPage && Math.abs(fittedZoom - 1) <= 0.12
+    ? 1
+    : fittedZoom;
   const cardCenterX = card.x + cardWidth / 2;
   const cardCenterY = card.y + cardHeight / 2;
-  const targetX = viewportWidth / 2 - cardCenterX * targetZoom;
-  const targetY = viewportHeight / 2 - cardCenterY * targetZoom;
+  let targetX = viewportWidth / 2 - cardCenterX * targetZoom;
+  let targetY = viewportHeight / 2 - cardCenterY * targetZoom;
+
+  if (isPage) {
+    // Keep the page surface on physical-pixel boundaries. The correction is
+    // sub-pixel sized, so centering remains visually unchanged.
+    const pixelRatio = Math.max(1, window.devicePixelRatio || 1);
+    const screenLeft = card.x * targetZoom + targetX;
+    const screenTop = card.y * targetZoom + targetY;
+    targetX += Math.round(screenLeft * pixelRatio) / pixelRatio - screenLeft;
+    targetY += Math.round(screenTop * pixelRatio) / pixelRatio - screenTop;
+  }
 
   if (isSmooth) {
     animateViewTo(targetX, targetY, targetZoom);
@@ -202,8 +221,12 @@ function enterCardFocus(card) {
   cancelPendingIframeFocus();
 
   if (focusedCard && focusedCard !== card) {
-    deactivateCard(focusedCard);
+    const previousCard = focusedCard;
+    deactivateCard(previousCard);
     focusedCard = null;
+    if (typeof reevaluatePageCardMemory === "function") {
+      reevaluatePageCardMemory(previousCard);
+    }
   }
 
   prepareFocusTransition();
@@ -234,6 +257,9 @@ function exitActiveFocus() {
   cancelPendingIframeFocus();
   deactivateCard(card);
   focusedCard = null;
+  if (typeof reevaluatePageCardMemory === "function") {
+    reevaluatePageCardMemory(card);
+  }
   releaseDocumentFocus();
   restorePreFocusView();
   return true;
