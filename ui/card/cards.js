@@ -516,3 +516,106 @@ function handleExcelFile(file, x, y) {
   };
   reader.readAsArrayBuffer(file);
 }
+
+// --- STATE SAVE & RESTORE SYSTEM (Ctrl + S) ---
+
+function getCanvasState() {
+  const serializedCards = cardsList.map(card => {
+    const base = {
+      type: card.type,
+      x: card.x,
+      y: card.y,
+      width: card.width,
+      height: card.height
+    };
+    if (card.type === "note") {
+      base.title = card.title;
+      base.content = card.content;
+    } else if (card.type === "page") {
+      base.url = card.currentUrl || card.url || "";
+    } else if (card.type === "image") {
+      base.src = card.src;
+    } else if (card.type === "excel") {
+      base.sheetName = card.sheetName;
+      base.html = card.html;
+    }
+    return base;
+  });
+
+  return {
+    view: { x: view.x, y: view.y, zoom: view.zoom },
+    cards: serializedCards
+  };
+}
+
+function saveCanvasState() {
+  const state = getCanvasState();
+  localStorage.setItem("SPACE_BROWSER_STATE", JSON.stringify(state));
+  showToast("💾 画布状态已成功保存至本地存储");
+}
+
+function loadCanvasState() {
+  const raw = localStorage.getItem("SPACE_BROWSER_STATE");
+  if (!raw) return false;
+
+  try {
+    const state = JSON.parse(raw);
+    
+    // Clear existing/default cards
+    cardsList.forEach(card => {
+      card.element.remove();
+    });
+    cardsList = [];
+    cardIdCounter = 0;
+
+    // Restore viewport view
+    if (state.view) {
+      view.x = state.view.x;
+      view.y = state.view.y;
+      view.zoom = state.view.zoom;
+      updateView();
+    }
+
+    // Restore cards
+    if (Array.isArray(state.cards)) {
+      state.cards.forEach(c => {
+        let card = null;
+        if (c.type === "note") {
+          card = createCard(c.title, c.content, c.x, c.y);
+        } else if (c.type === "page") {
+          card = createPageCard(c.x, c.y, c.url);
+        } else if (c.type === "image") {
+          card = createImageCard(c.src, c.x, c.y, c.width, c.height);
+        } else if (c.type === "excel") {
+          card = createExcelCard(c.sheetName, c.html, c.x, c.y, c.width, c.height);
+        }
+
+        // Apply custom width and height if loaded
+        if (card && card.element) {
+          if (c.width) {
+            card.width = c.width;
+            card.element.style.width = `${c.width}px`;
+          }
+          if (c.height) {
+            card.height = c.height;
+            card.element.style.height = `${c.height}px`;
+          }
+        }
+      });
+    }
+    showToast("⚡ 画布已成功恢复至上次保存的状态");
+    return true;
+  } catch (err) {
+    console.error("[State Restore] Failed to parse state:", err);
+    showToast("⚠️ 恢复画布状态失败: " + err.message, true);
+    return false;
+  }
+}
+
+// Keyboard shortcut for saving state (Ctrl + S)
+window.addEventListener("keydown", event => {
+  if ((event.ctrlKey || event.metaKey) && (event.key === "s" || event.key === "S")) {
+    event.preventDefault();
+    saveCanvasState();
+  }
+});

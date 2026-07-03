@@ -879,7 +879,11 @@ function initDemo() {
 }
 
 // Kick off
-initDemo();
+if (typeof loadCanvasState === "function" && loadCanvasState()) {
+  // Loaded successfully
+} else {
+  initDemo();
+}
 
 // Collapsible Help Panel (Tips Panel)
 (function() {
