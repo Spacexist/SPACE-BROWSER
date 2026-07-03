@@ -48,16 +48,39 @@
     }
   }, true);
 
-  // 4. Capture Escape keydown event inside the frame and send to parent Canvas
-  window.addEventListener("keydown", function(event) {
-    if ((event.key === "Escape" || event.code === "Escape" || event.keyCode === 27) && !event.repeat) {
-      try {
-        window.parent.postMessage({ source: "SPACE_ESCAPE_PRESSED" }, "*");
-      } catch (e) {
-        console.error("[Content Script] Failed to post SPACE_ESCAPE_PRESSED:", e);
-      }
+  // 4. Escape belongs to the outer Canvas while a page card is focused.
+  // Consume both halves of the keystroke in the earliest capture phase so the
+  // embedded site cannot also close a modal, leave fullscreen, or handle keyup.
+  function isEscapeKey(event) {
+    return event.key === "Escape" || event.code === "Escape" || event.keyCode === 27;
+  }
+
+  function isEmbeddedFrame() {
+    try {
+      return window.self !== window.top;
+    } catch (e) {
+      return true;
     }
-  }, true);
+  }
+
+  function captureEscape(event) {
+    if (!isEmbeddedFrame() || !isEscapeKey(event)) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+
+    if (event.type !== "keydown" || event.repeat) return;
+
+    try {
+      window.parent.postMessage({ source: "SPACE_ESCAPE_PRESSED" }, "*");
+    } catch (e) {
+      console.error("[Content Script] Failed to post SPACE_ESCAPE_PRESSED:", e);
+    }
+  }
+
+  window.addEventListener("keydown", captureEscape, true);
+  window.addEventListener("keyup", captureEscape, true);
 
   // 5. Listen for navigation controls from the Canvas parent window
   window.addEventListener("message", function(event) {
@@ -73,6 +96,7 @@
       reportNavigation();
     } else if (event.data && event.data.source === "SPACE_ESCAPE_PRESSED") {
       // Forward the escape message up (for nested frames support)
+      if (!isEmbeddedFrame()) return;
       try {
         window.parent.postMessage({ source: "SPACE_ESCAPE_PRESSED" }, "*");
       } catch (e) {

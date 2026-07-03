@@ -1,4 +1,4 @@
-// canvas.js
+// canvas/canvas.js
 // Dedicated Module for Canvas Infinite Viewport, Zooming/Panning, Dot-grid, and File Drops
 
 // Viewport state shared globally
@@ -16,10 +16,39 @@ var gridPointer = {
 };
 var spaceDown = false;
 var panning = null;
+var dotGridEffect = document.getElementById("dot-grid-effect");
+var renderedGridView = null;
+var gridRefreshTimer = 0;
+var gridViewMotionActive = false;
+var viewportBounds = null;
+var pointerMoveFrame = 0;
+var latestPointerPosition = { clientX: -10000, clientY: -10000 };
+var wheelFrame = 0;
+var pendingWheelInput = { clientX: 0, clientY: 0, deltaY: 0 };
+
+const DOT_GRID_CACHE_PADDING = 128;
+const DOT_GRID_EFFECT_SIZE = 320;
+const DOT_GRID_EFFECT_RADIUS = 140;
+const DOT_GRID_SETTLE_DELAY = 80;
+
+function refreshViewportBounds() {
+  const rect = viewport.getBoundingClientRect();
+  viewportBounds = {
+    left: rect.left,
+    top: rect.top,
+    width: rect.width,
+    height: rect.height
+  };
+  return viewportBounds;
+}
+
+function getViewportBounds() {
+  return viewportBounds || refreshViewportBounds();
+}
 
 // Coordinate Conversion
 function screenToWorld(clientX, clientY) {
-  const rect = viewport.getBoundingClientRect();
+  const rect = getViewportBounds();
   return {
     x: (clientX - rect.left - view.x) / view.zoom,
     y: (clientY - rect.top - view.y) / view.zoom
@@ -28,19 +57,125 @@ function screenToWorld(clientX, clientY) {
 
 // Reset/Fit View
 var viewAnimation = null;
+var viewCompositorAnimation = null;
+var viewAnimationDefersGrid = false;
+var renderedZoomPercent = null;
 
-function cancelViewAnimation() {
+function finishDeferredViewRendering(refreshGrid = true) {
+  if (!viewAnimationDefersGrid) return;
+
+  viewAnimationDefersGrid = false;
+  world.style.willChange = "";
+  if (refreshGrid) {
+    previewStaticDotGrid();
+    scheduleDotGrid();
+  }
+}
+
+function cancelViewAnimation(refreshGrid = true) {
+  if (viewCompositorAnimation) {
+    const animation = viewCompositorAnimation;
+    viewCompositorAnimation = null;
+
+    // WAAPI focus moves run outside the JS view state. Capture the current
+    // compositor matrix before cancelling so dragging or a second focus move
+    // continues from the exact visible position instead of jumping.
+    const transform = getComputedStyle(world).transform;
+    if (transform && transform !== "none") {
+      try {
+        const matrix = new DOMMatrixReadOnly(transform);
+        view.x = matrix.e;
+        view.y = matrix.f;
+        view.zoom = Math.abs(matrix.a);
+      } catch (_) {
+        // Keep the last stable view if an older browser cannot parse matrices.
+      }
+    }
+    animation.cancel();
+    updateView({ updateGrid: false });
+  }
+
   if (viewAnimation) {
     cancelAnimationFrame(viewAnimation);
     viewAnimation = null;
   }
+  finishDeferredViewRendering(refreshGrid);
 }
 
-function animateViewTo(targetX, targetY, targetZoom, onComplete = null) {
-  cancelViewAnimation();
+function animateViewTo(
+  targetX,
+  targetY,
+  targetZoom,
+  onComplete = null,
+  options = {}
+) {
+  cancelViewAnimation(false);
+
+  const deferGrid = Boolean(options.deferGrid);
+  const duration = Number.isFinite(options.duration)
+    ? Math.max(0, options.duration)
+    : 300;
+  const movementIsNegligible =
+    Math.abs(targetX - view.x) < 0.01 &&
+    Math.abs(targetY - view.y) < 0.01 &&
+    Math.abs(targetZoom - view.zoom) < 0.0001;
+
+  if (movementIsNegligible || duration === 0) {
+    view.x = targetX;
+    view.y = targetY;
+    view.zoom = targetZoom;
+    updateView();
+    if (typeof onComplete === "function") onComplete();
+    return;
+  }
+
+  if (deferGrid) {
+    viewAnimationDefersGrid = true;
+    world.style.willChange = "transform";
+    gridPointer.strength = 0;
+    hideDotGridEffect();
+  }
+
+  if (options.compositor && typeof world.animate === "function") {
+    const startTransform =
+      `translate(${view.x}px, ${view.y}px) scale(${view.zoom})`;
+    const targetTransform =
+      `translate(${targetX}px, ${targetY}px) scale(${targetZoom})`;
+
+    viewAnimation = requestAnimationFrame(() => {
+      viewAnimation = null;
+      const animation = world.animate(
+        [
+          { transform: startTransform },
+          { transform: targetTransform }
+        ],
+        {
+          duration,
+          easing: "cubic-bezier(0.215, 0.61, 0.355, 1)",
+          fill: "forwards"
+        }
+      );
+      viewCompositorAnimation = animation;
+
+      animation.onfinish = () => {
+        if (viewCompositorAnimation !== animation) return;
+
+        viewCompositorAnimation = null;
+        view.x = targetX;
+        view.y = targetY;
+        view.zoom = targetZoom;
+        updateView({ updateGrid: false });
+        animation.cancel();
+        finishDeferredViewRendering(true);
+        if (typeof onComplete === "function") {
+          onComplete();
+        }
+      };
+    });
+    return;
+  }
   
-  const startTime = performance.now();
-  const duration = 300; // 300ms smooth transition
+  var startTime = 0;
   const startX = view.x;
   const startY = view.y;
   const startZoom = view.zoom;
@@ -54,34 +189,164 @@ function animateViewTo(targetX, targetY, targetZoom, onComplete = null) {
     view.y = startY + (targetY - startY) * ease;
     view.zoom = startZoom + (targetZoom - startZoom) * ease;
     
-    updateView();
+    updateView({ updateGrid: !deferGrid });
     
     if (progress < 1) {
       viewAnimation = requestAnimationFrame(step);
     } else {
       viewAnimation = null;
+      finishDeferredViewRendering(true);
       if (typeof onComplete === "function") {
         onComplete();
       }
     }
   }
-  
-  viewAnimation = requestAnimationFrame(step);
+
+  function beginAnimation(now) {
+    startTime = now;
+    viewAnimation = requestAnimationFrame(step);
+  }
+
+  // Give Chromium one paint to promote the world before moving large iframe
+  // surfaces. This avoids paying layer creation on the first animation frame.
+  viewAnimation = requestAnimationFrame(beginAnimation);
 }
 
-function updateView() {
+function updateView(options = {}) {
   world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.zoom})`;
-  zoomLabel.textContent = `${Math.round(view.zoom * 100)}%`;
-  scheduleDotGrid();
+  const zoomPercent = Math.round(view.zoom * 100);
+  if (zoomPercent !== renderedZoomPercent) {
+    renderedZoomPercent = zoomPercent;
+    zoomLabel.textContent = `${zoomPercent}%`;
+  }
+  if (options.updateGrid !== false) {
+    previewStaticDotGrid();
+    scheduleDotGrid();
+  }
 }
 
 // Dot-Grid Rendering
+function getDotGridMetrics(targetView = view) {
+  let worldStep = 40;
+  let size = worldStep * targetView.zoom;
+  while (size < 32) {
+    worldStep *= 2;
+    size = worldStep * targetView.zoom;
+  }
+  while (size > 64) {
+    worldStep /= 2;
+    size = worldStep * targetView.zoom;
+  }
+
+  return {
+    size,
+    startX: ((targetView.x % size) + size) % size,
+    startY: ((targetView.y % size) + size) % size
+  };
+}
+
+function drawStaticDotGrid() {
+  const viewportWidth = viewport.clientWidth;
+  const viewportHeight = viewport.clientHeight;
+  if (!viewportWidth || !viewportHeight) return;
+
+  const width = viewportWidth + DOT_GRID_CACHE_PADDING * 2;
+  const height = viewportHeight + DOT_GRID_CACHE_PADDING * 2;
+  const ratio = Math.min(2, window.devicePixelRatio || 1);
+  const pixelWidth = Math.max(1, Math.round(width * ratio));
+  const pixelHeight = Math.max(1, Math.round(height * ratio));
+
+  if (dotGrid.width !== pixelWidth || dotGrid.height !== pixelHeight) {
+    dotGrid.width = pixelWidth;
+    dotGrid.height = pixelHeight;
+  }
+  dotGrid.style.width = `${width}px`;
+  dotGrid.style.height = `${height}px`;
+  dotGrid.style.transform = "none";
+
+  const ctx = dotGrid.getContext("2d");
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  ctx.clearRect(0, 0, width, height);
+
+  const { size, startX, startY } = getDotGridMetrics(view);
+  const minX = -DOT_GRID_CACHE_PADDING;
+  const minY = -DOT_GRID_CACHE_PADDING;
+  const maxX = viewportWidth + DOT_GRID_CACHE_PADDING;
+  const maxY = viewportHeight + DOT_GRID_CACHE_PADDING;
+  const firstX = startX + Math.ceil((minX - startX) / size) * size;
+  const firstY = startY + Math.ceil((minY - startY) / size) * size;
+  const baseRadius = 0.46;
+
+  ctx.beginPath();
+  for (let y = firstY; y <= maxY; y += size) {
+    for (let x = firstX; x <= maxX; x += size) {
+      const localX = x + DOT_GRID_CACHE_PADDING;
+      const localY = y + DOT_GRID_CACHE_PADDING;
+      ctx.moveTo(localX + baseRadius, localY);
+      ctx.arc(localX, localY, baseRadius, 0, Math.PI * 2);
+    }
+  }
+  ctx.fillStyle = "rgba(200, 208, 220, 0.48)";
+  ctx.fill();
+
+  renderedGridView = { x: view.x, y: view.y, zoom: view.zoom };
+}
+
+function previewStaticDotGrid() {
+  if (!renderedGridView) {
+    drawStaticDotGrid();
+  }
+  if (!renderedGridView) return;
+
+  gridViewMotionActive = true;
+  const scale = view.zoom / renderedGridView.zoom;
+  const translateX = view.x - renderedGridView.x * scale;
+  const translateY = view.y - renderedGridView.y * scale;
+  const width = viewport.clientWidth;
+  const height = viewport.clientHeight;
+  const minX = translateX - DOT_GRID_CACHE_PADDING * scale;
+  const minY = translateY - DOT_GRID_CACHE_PADDING * scale;
+  const maxX = translateX + (width + DOT_GRID_CACHE_PADDING) * scale;
+  const maxY = translateY + (height + DOT_GRID_CACHE_PADDING) * scale;
+  const cacheStillCoversViewport = minX <= 0 && minY <= 0 &&
+    maxX >= width && maxY >= height;
+
+  if (cacheStillCoversViewport) {
+    dotGrid.style.transform =
+      `translate3d(${translateX}px, ${translateY}px, 0) scale(${scale})`;
+  } else {
+    drawStaticDotGrid();
+  }
+
+  clearTimeout(gridRefreshTimer);
+  gridRefreshTimer = window.setTimeout(() => {
+    drawStaticDotGrid();
+    gridViewMotionActive = false;
+    scheduleDotGrid();
+  }, DOT_GRID_SETTLE_DELAY);
+}
+
+function hideDotGridEffect() {
+  dotGridEffect.style.transform = "translate3d(-400px, -400px, 0)";
+}
+
 function scheduleDotGrid() {
   if (gridFrame) return;
   gridFrame = requestAnimationFrame(() => {
     gridFrame = 0;
-    const interactionActive = Boolean(panning || activeDragCard || activeResizeCard);
-    const targetStrength = gridPointer.inside ? (interactionActive ? 0.2 : 1) : 0;
+    const interactionActive = Boolean(
+      gridViewMotionActive || panning || activeDragCard || activeResizeCard
+    );
+
+    if (interactionActive) {
+      gridPointer.strength = 0;
+      gridPointer.velocityX = 0;
+      gridPointer.velocityY = 0;
+      hideDotGridEffect();
+      return;
+    }
+
+    const targetStrength = gridPointer.inside ? 1 : 0;
     const strengthEase = gridPointer.inside ? 0.14 : 0.18;
 
     // A damped spring gives the field a short, light return without keeping a
@@ -96,7 +361,7 @@ function scheduleDotGrid() {
     gridPointer.visualY += gridPointer.velocityY;
     gridPointer.strength += (targetStrength - gridPointer.strength) * strengthEase;
 
-    drawDotGrid();
+    drawDotGridEffect();
 
     const pointerMoving = targetStrength > 0.01 && (
       Math.abs(gridPointer.x - gridPointer.visualX) > 0.15 ||
@@ -109,83 +374,84 @@ function scheduleDotGrid() {
   });
 }
 
-function drawDotGrid() {
-  const width = viewport.clientWidth;
-  const height = viewport.clientHeight;
-  if (!width || !height) return;
-  
+function drawDotGridEffect() {
+  if (!dotGridEffect) return;
   const ratio = Math.min(2, window.devicePixelRatio || 1);
-  const pixelWidth = Math.max(1, Math.round(width * ratio));
-  const pixelHeight = Math.max(1, Math.round(height * ratio));
-  if (dotGrid.width !== pixelWidth || dotGrid.height !== pixelHeight) {
-    dotGrid.width = pixelWidth;
-    dotGrid.height = pixelHeight;
+  const pixelSize = Math.max(1, Math.round(DOT_GRID_EFFECT_SIZE * ratio));
+  if (dotGridEffect.width !== pixelSize || dotGridEffect.height !== pixelSize) {
+    dotGridEffect.width = pixelSize;
+    dotGridEffect.height = pixelSize;
   }
-  
-  const ctx = dotGrid.getContext("2d");
+
+  const ctx = dotGridEffect.getContext("2d");
   ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-  ctx.clearRect(0, 0, width, height);
-  
-  // Keep the number of visible dots stable at every zoom level. The world-grid
-  // interval still follows zoom, but switches level before it becomes dense.
-  let worldStep = 40;
-  let size = worldStep * view.zoom;
-  while (size < 32) {
-    worldStep *= 2;
-    size = worldStep * view.zoom;
+  ctx.clearRect(0, 0, DOT_GRID_EFFECT_SIZE, DOT_GRID_EFFECT_SIZE);
+
+  if (gridPointer.strength <= 0.004) {
+    hideDotGridEffect();
+    return;
   }
-  while (size > 64) {
-    worldStep /= 2;
-    size = worldStep * view.zoom;
-  }
-  
-  const startX = ((view.x % size) + size) % size;
-  const startY = ((view.y % size) + size) % size;
+
+  const halfSize = DOT_GRID_EFFECT_SIZE / 2;
+  const canvasLeft = Math.floor(gridPointer.visualX - halfSize);
+  const canvasTop = Math.floor(gridPointer.visualY - halfSize);
+  dotGridEffect.style.transform =
+    `translate3d(${canvasLeft}px, ${canvasTop}px, 0)`;
+
+  // The local layer replaces this small square exactly, so no circular mask
+  // or halo is needed over the cached full-screen grid.
+  ctx.fillStyle = "#141414";
+  ctx.fillRect(0, 0, DOT_GRID_EFFECT_SIZE, DOT_GRID_EFFECT_SIZE);
+
+  const { size, startX, startY } = getDotGridMetrics(renderedGridView || view);
   const baseRadius = 0.46;
-  const hoverRadius = 140;
-  const hoverRadiusSquared = hoverRadius * hoverRadius;
+  const hoverRadiusSquared = DOT_GRID_EFFECT_RADIUS * DOT_GRID_EFFECT_RADIUS;
+  const firstX = startX + Math.ceil((canvasLeft - startX) / size) * size;
+  const firstY = startY + Math.ceil((canvasTop - startY) / size) * size;
+  const maxX = canvasLeft + DOT_GRID_EFFECT_SIZE;
+  const maxY = canvasTop + DOT_GRID_EFFECT_SIZE;
   const influencedDots = [];
-  
-  // Batch the quiet grid. Only the small local field needs individual drawing.
+
   ctx.beginPath();
-  for (let y = startY; y < height; y += size) {
-    for (let x = startX; x < width; x += size) {
-      if (gridPointer.strength > 0.01) {
-        const dx = x - gridPointer.visualX;
-        const dy = y - gridPointer.visualY;
-        const distanceSquared = dx * dx + dy * dy;
-        if (distanceSquared < hoverRadiusSquared) {
-          const distance = Math.sqrt(distanceSquared);
-          const distanceRatio = distance / hoverRadius;
-          const proximity = 1 - distanceRatio;
-          const easedProximity = proximity * proximity * (3 - 2 * proximity);
-          const influence = easedProximity * gridPointer.strength;
-          const displacement = 9 * influence;
-          const directionX = distance > 0.01 ? dx / distance : 0;
-          const directionY = distance > 0.01 ? dy / distance : 0;
-          influencedDots.push({
-            x: x + directionX * displacement,
-            y: y + directionY * displacement,
-            influence
-          });
-          continue;
-        }
+  for (let y = firstY; y <= maxY; y += size) {
+    for (let x = firstX; x <= maxX; x += size) {
+      const localX = x - canvasLeft;
+      const localY = y - canvasTop;
+      const dx = x - gridPointer.visualX;
+      const dy = y - gridPointer.visualY;
+      const distanceSquared = dx * dx + dy * dy;
+
+      if (distanceSquared < hoverRadiusSquared) {
+        const distance = Math.sqrt(distanceSquared);
+        const distanceRatio = distance / DOT_GRID_EFFECT_RADIUS;
+        const proximity = 1 - distanceRatio;
+        const easedProximity = proximity * proximity * (3 - 2 * proximity);
+        const influence = easedProximity * gridPointer.strength;
+        const displacement = 9 * influence;
+        const directionX = distance > 0.01 ? dx / distance : 0;
+        const directionY = distance > 0.01 ? dy / distance : 0;
+        influencedDots.push({
+          x: localX + directionX * displacement,
+          y: localY + directionY * displacement,
+          influence
+        });
+        continue;
       }
 
-      ctx.moveTo(x + baseRadius, y);
-      ctx.arc(x, y, baseRadius, 0, Math.PI * 2);
+      ctx.moveTo(localX + baseRadius, localY);
+      ctx.arc(localX, localY, baseRadius, 0, Math.PI * 2);
     }
   }
-  ctx.fillStyle = "rgba(190, 198, 210, 0.34)";
+  ctx.fillStyle = "rgba(200, 208, 220, 0.48)";
   ctx.fill();
 
   // The field is expressed mainly through displacement, not brightness.
   for (const dot of influencedDots) {
     const radius = baseRadius + 0.48 * dot.influence;
-    const alpha = 0.22 + 0.4 * dot.influence;
+    const alpha = 0.48 + 0.3 * dot.influence;
     ctx.beginPath();
     ctx.arc(dot.x, dot.y, radius, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(205, 214, 224, ${alpha})`;
+    ctx.fillStyle = `rgba(214, 222, 232, ${alpha})`;
     ctx.fill();
   }
 }
@@ -200,32 +466,48 @@ window.addEventListener("keyup", event => {
 
 // Windows resize
 window.addEventListener("resize", () => {
+  refreshViewportBounds();
+  clearTimeout(gridRefreshTimer);
+  renderedGridView = null;
+  gridViewMotionActive = false;
+  drawStaticDotGrid();
   scheduleDotGrid();
 });
 
 // Canvas Viewport Events (Panning & Zooming)
-viewport.addEventListener("wheel", event => {
-  event.preventDefault();
-  if (typeof cancelPendingFocusRestore === "function") {
-    cancelPendingFocusRestore();
-  }
-  cancelViewAnimation();
-  
-  const rect = viewport.getBoundingClientRect();
-  const screenX = event.clientX - rect.left;
-  const screenY = event.clientY - rect.top;
+function applyPendingWheelZoom() {
+  wheelFrame = 0;
+  const deltaY = pendingWheelInput.deltaY;
+  pendingWheelInput.deltaY = 0;
+  if (!deltaY) return;
+
+  const rect = getViewportBounds();
+  const screenX = pendingWheelInput.clientX - rect.left;
+  const screenY = pendingWheelInput.clientY - rect.top;
   
   const worldX = (screenX - view.x) / view.zoom;
   const worldY = (screenY - view.y) / view.zoom;
   
   // Calculate next zoom using exponential step
-  const next = Math.min(8, Math.max(0.04, view.zoom * Math.exp(-event.deltaY * 0.0012)));
+  const next = Math.min(8, Math.max(0.04, view.zoom * Math.exp(-deltaY * 0.0012)));
   
   view.x = screenX - worldX * next;
   view.y = screenY - worldY * next;
   view.zoom = next;
   
   updateView();
+}
+
+viewport.addEventListener("wheel", event => {
+  event.preventDefault();
+  interruptFocusViewTransition();
+
+  pendingWheelInput.clientX = event.clientX;
+  pendingWheelInput.clientY = event.clientY;
+  pendingWheelInput.deltaY += event.deltaY;
+  if (!wheelFrame) {
+    wheelFrame = requestAnimationFrame(applyPendingWheelZoom);
+  }
 }, { passive: false });
 
 viewport.addEventListener("mousedown", event => {
@@ -235,10 +517,7 @@ viewport.addEventListener("mousedown", event => {
   // for panning; Escape is the only focus-exit shortcut.
   if (event.button === 1 || (event.button === 0 && (spaceDown || !interactive))) {
     event.preventDefault();
-    if (typeof cancelPendingFocusRestore === "function") {
-      cancelPendingFocusRestore();
-    }
-    cancelViewAnimation();
+    interruptFocusViewTransition();
     panning = { x: event.clientX - view.x, y: event.clientY - view.y };
     viewport.style.cursor = "grabbing";
     viewport.classList.add("panning");
@@ -246,10 +525,13 @@ viewport.addEventListener("mousedown", event => {
   }
 });
 
-window.addEventListener("mousemove", event => {
-  const rect = viewport.getBoundingClientRect();
-  const pointerX = event.clientX - rect.left;
-  const pointerY = event.clientY - rect.top;
+function applyPendingPointerMove() {
+  pointerMoveFrame = 0;
+  const clientX = latestPointerPosition.clientX;
+  const clientY = latestPointerPosition.clientY;
+  const rect = getViewportBounds();
+  const pointerX = clientX - rect.left;
+  const pointerY = clientY - rect.top;
   const pointerInside = pointerX >= 0 && pointerX <= rect.width &&
     pointerY >= 0 && pointerY <= rect.height;
 
@@ -265,36 +547,33 @@ window.addEventListener("mousemove", event => {
   scheduleDotGrid();
   
   if (panning) {
-    view.x = event.clientX - panning.x;
-    view.y = event.clientY - panning.y;
+    view.x = clientX - panning.x;
+    view.y = clientY - panning.y;
     updateView();
     return;
   }
   
   // Dragging card
-  if (activeDragCard) {
-    const worldMouse = screenToWorld(event.clientX, event.clientY);
-    const cardId = parseInt(activeDragCard.dataset.id);
-    const cardObj = cardsList.find(c => c.id === cardId);
+  if (activeDragCard && activeDragCardData) {
+    const worldMouse = screenToWorld(clientX, clientY);
+    const cardObj = activeDragCardData;
     
     if (cardObj) {
       cardObj.x = worldMouse.x - cardDragOffset.x;
       cardObj.y = worldMouse.y - cardDragOffset.y;
       activeDragCard.style.left = `${cardObj.x}px`;
       activeDragCard.style.top = `${cardObj.y}px`;
-      scheduleVisibilityCheck(); // check visibility during drag
     }
     return;
   }
   
   // Resizing card
-  if (activeResizeCard && resizeDirection) {
-    const cardId = parseInt(activeResizeCard.dataset.id);
-    const cardObj = cardsList.find(c => c.id === cardId);
+  if (activeResizeCard && activeResizeCardData && resizeDirection) {
+    const cardObj = activeResizeCardData;
     
     if (cardObj) {
-      const dx = (event.clientX - resizeStart.clientX) / view.zoom;
-      const dy = (event.clientY - resizeStart.clientY) / view.zoom;
+      const dx = (clientX - resizeStart.clientX) / view.zoom;
+      const dy = (clientY - resizeStart.clientY) / view.zoom;
       
       let nextW = resizeStart.width;
       let nextH = resizeStart.height;
@@ -334,12 +613,31 @@ window.addEventListener("mousemove", event => {
       activeResizeCard.style.height = `${nextH}px`;
       activeResizeCard.style.left = `${nextX}px`;
       activeResizeCard.style.top = `${nextY}px`;
-      scheduleVisibilityCheck(); // check visibility during resize
     }
   }
+}
+
+function queuePointerMove(clientX, clientY) {
+  latestPointerPosition.clientX = clientX;
+  latestPointerPosition.clientY = clientY;
+  if (!pointerMoveFrame) {
+    pointerMoveFrame = requestAnimationFrame(applyPendingPointerMove);
+  }
+}
+
+window.addEventListener("mousemove", event => {
+  queuePointerMove(event.clientX, event.clientY);
 });
 
-window.addEventListener("mouseup", () => {
+window.addEventListener("mouseup", event => {
+  if (pointerMoveFrame) {
+    cancelAnimationFrame(pointerMoveFrame);
+    pointerMoveFrame = 0;
+  }
+  latestPointerPosition.clientX = event.clientX;
+  latestPointerPosition.clientY = event.clientY;
+  applyPendingPointerMove();
+
   if (panning) {
     panning = null;
     viewport.style.cursor = spaceDown ? "grab" : "";
@@ -349,12 +647,14 @@ window.addEventListener("mouseup", () => {
   if (activeDragCard) {
     activeDragCard.classList.remove("dragging");
     activeDragCard = null;
+    activeDragCardData = null;
     viewport.classList.remove("dragging-card");
   }
   
   if (activeResizeCard) {
     activeResizeCard.classList.remove("resizing");
     activeResizeCard = null;
+    activeResizeCardData = null;
     resizeDirection = null;
     viewport.classList.remove("dragging-card");
   }
@@ -370,6 +670,8 @@ viewport.addEventListener("mouseleave", () => {
 
 // Fit all cards dynamically on screen
 function resetView() {
+  interruptFocusViewTransition();
+
   const vWidth = viewport.clientWidth;
   const vHeight = viewport.clientHeight;
   
@@ -443,9 +745,7 @@ function addNewPage() {
 
 // Toolbar controls hookups
 $("#btn-zoom-in").addEventListener("click", () => {
-  if (typeof cancelPendingFocusRestore === "function") {
-    cancelPendingFocusRestore();
-  }
+  interruptFocusViewTransition();
   const rect = viewport.getBoundingClientRect();
   const centerX = rect.width / 2;
   const centerY = rect.height / 2;
@@ -459,9 +759,7 @@ $("#btn-zoom-in").addEventListener("click", () => {
 });
 
 $("#btn-zoom-out").addEventListener("click", () => {
-  if (typeof cancelPendingFocusRestore === "function") {
-    cancelPendingFocusRestore();
-  }
+  interruptFocusViewTransition();
   const rect = viewport.getBoundingClientRect();
   const centerX = rect.width / 2;
   const centerY = rect.height / 2;
@@ -582,42 +880,6 @@ function initDemo() {
 
 // Kick off
 initDemo();
-
-// Global Focus Status
-// Observe the same focused-card class that drives each card LED. Keeping this
-// read-only detector here avoids introducing a second focus state machine.
-(function() {
-  const status = document.getElementById("canvas-focus-status");
-  if (!status) return;
-
-  function syncCanvasFocusStatus() {
-    const isFocused = Boolean(world.querySelector(".card-item.focused-card"));
-    const label = isFocused ? "画布已聚焦" : "画布未聚焦";
-
-    status.classList.toggle("is-focused", isFocused);
-    status.setAttribute("aria-label", label);
-    status.title = label;
-  }
-
-  const focusObserver = new MutationObserver(mutations => {
-    const focusMayHaveChanged = mutations.some(mutation =>
-      mutation.type === "childList" ||
-      (mutation.type === "attributes" &&
-        mutation.target.classList.contains("card-item"))
-    );
-
-    if (focusMayHaveChanged) syncCanvasFocusStatus();
-  });
-
-  focusObserver.observe(world, {
-    subtree: true,
-    childList: true,
-    attributes: true,
-    attributeFilter: ["class"]
-  });
-
-  syncCanvasFocusStatus();
-})();
 
 // Collapsible Help Panel (Tips Panel)
 (function() {

@@ -1,0 +1,68 @@
+/* Global canvas focus status. */
+.canvas-focus-status {
+  position: absolute;
+  top: 24px;
+  left: 24px;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(20, 20, 20, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(10px);
+  pointer-events: none;
+  z-index: 100;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease,
+    background-color 0.2s ease;
+}
+
+.canvas-focus-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #15803d;
+  opacity: 0.5;
+  transition: background-color 0.2s ease, opacity 0.2s ease,
+    box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.canvas-focus-status.is-focused {
+  background: rgba(22, 40, 29, 0.78);
+  border-color: rgba(74, 222, 128, 0.22);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.36),
+    inset 0 0 12px rgba(74, 222, 128, 0.045);
+}
+
+.canvas-focus-status.is-focused .canvas-focus-dot {
+  background: #4ade80;
+  opacity: 1;
+  transform: scale(1.08);
+  box-shadow: 0 0 8px #4ade80, 0 0 3px #4ade80;
+}
+
+/* Unified focused state for every card type. */
+.card-item.focused-card {
+  border-color: rgba(255, 255, 255, 0.45);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65);
+}
+
+.card-item.focused-card .page-mode-indicator {
+  background: #4ade80;
+  opacity: 1;
+  box-shadow: 0 0 8px #4ade80, 0 0 3px #4ade80;
+}
+
+.card-item.page-card:not(.has-iframe).focused-card .page-mode-indicator {
+  background: #facc15;
+  opacity: 1;
+  box-shadow: 0 0 8px #facc15, 0 0 3px #facc15;
+}
+
+/* Note cards become text editors only while focused. */
+.card-item.note-card.focused-card h3,
+.card-item.note-card.focused-card p {
+  user-select: text;
+  cursor: text;
+}

@@ -262,8 +262,6 @@
   overflow: hidden;
   border: 1px solid var(--border);
   background: #ffffff;
-  -webkit-perspective: 1000;
-  backface-visibility: hidden;
 }
 
 .page-iframe {
@@ -276,15 +274,12 @@
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
   image-rendering: -webkit-optimize-contrast;
-  backface-visibility: hidden;
-  transform: translateZ(0);
 }
 
 .iframe-cover {
   position: absolute;
   inset: 0;
-  background: rgba(20, 20, 20, 0.4);
-  backdrop-filter: blur(2px);
+  background: rgba(20, 20, 20, 0.48);
   z-index: 10;
   cursor: grab;
   display: flex;
@@ -296,17 +291,18 @@
   transition: opacity 0.2s ease;
 }
 
-/* If active interactive mode, hide cover to allow clicks on iframe */
+/* Keep the cover layer mounted, but make it transparent and click-through. */
 .card-item.page-card.interactive .iframe-cover {
-  display: none !important;
+  opacity: 0;
+  pointer-events: none !important;
+  cursor: default;
 }
 
 /* Show cover when card is frozen and has loaded an iframe */
 .card-item.page-card.has-iframe:not(.interactive) .iframe-cover {
   opacity: 1;
   pointer-events: auto;
-  backdrop-filter: blur(3px);
-  background: rgba(20, 20, 20, 0.45);
+  background: rgba(20, 20, 20, 0.52);
 }
 
 /* Frost overlay text/icon */
@@ -345,12 +341,22 @@
 
 /* Focus Manager adds this only to interactive iframes during canvas movement. */
 .card-item.page-card.interactive .iframe-cover.canvas-input-shield {
-  display: block !important;
   opacity: 1 !important;
   pointer-events: auto !important;
   cursor: grabbing !important;
   background: transparent !important;
   backdrop-filter: none !important;
+}
+
+/* During a focus camera move, composite only the target page surface. */
+#viewport.focus-view-transition
+  .card-item.page-card:not(.focus-transition-card) .page-iframe {
+  visibility: hidden;
+}
+
+#viewport.focus-view-transition
+  .card-item.page-card:not(.focus-transition-card) .iframe-wrapper {
+  background: #141414;
 }
 
 .iframe-cover.canvas-input-shield .iframe-freeze-indicator {
@@ -466,24 +472,11 @@
   flex-shrink: 0;
 }
 
-/* Light up green dot with glow when the card is focused */
-.card-item.focused-card .page-mode-indicator {
-  background: #4ade80; /* Bright glowing green when focused */
-  opacity: 1;
-  box-shadow: 0 0 8px #4ade80, 0 0 3px #4ade80;
-}
-
 /* Page Card without loaded iframe (empty state) -> Yellow dot */
 .card-item.page-card:not(.has-iframe) .page-mode-indicator {
   background: #eab308; /* Brighter yellow when idle */
   opacity: 0.85; /* Clearly visible on dark backgrounds */
   box-shadow: none;
-}
-
-.card-item.page-card:not(.has-iframe).focused-card .page-mode-indicator {
-  background: #facc15; /* Bright glowing yellow when focused */
-  opacity: 1;
-  box-shadow: 0 0 8px #facc15, 0 0 3px #facc15;
 }
 
 /* Bottom iPhone Drag Handle */
@@ -520,19 +513,6 @@
 
 .page-drag-handle-wrapper:active {
   cursor: grabbing;
-}
-
-/* Unified focused state for every card type */
-.card-item.focused-card {
-  border-color: rgba(255, 255, 255, 0.45);
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65);
-}
-
-/* Note cards become real text editors only while focused. */
-.card-item.note-card.focused-card h3,
-.card-item.note-card.focused-card p {
-  user-select: text;
-  cursor: text;
 }
 
 /* Iframe Sleep Placeholder */

@@ -7,21 +7,24 @@
 
 ## ⚡ 核心特性
 
-* **🛸 纯静态架构（零后台开销）**：不需要拉起任何 Node.js 或 JVM 等重量级后台服务。直接通过浏览器本地文件协议（`file:///`）瞬间开启，零运行内存和网络开销。
-* **🚀 极致性能：GPU 硬件加速与粒子网格优化**：
-  - **Compositor Compositing Layer**：为画布视口元素 `#world` 以及卡片元素 `.card-item` 全面开启 `will-change: transform` 以及 `transform: translateZ(0)`，使缩放平移、拖拽拉伸仅占用 GPU 显卡带宽进行复合操作，避免页面频繁重排（Reflow）与重绘（Repaint）。
-  - **GPU 粒子网格渲染**：优化了鼠标磁场点阵的绘制路径，将原先消耗巨大的 `ctx.arc` 复杂圆弧路径绘制转换为 GPU 优化的 `ctx.rect` 1x1 像素快速填充，使得数千个粒子背景即使在 4K 超高分屏上也能跑满 60fps 帧率。
+* **🛸 纯静态架构（无本地服务进程）**：不需要 Node.js 或 JVM 后台服务，`clickme.bat` 生成运行时白名单后，直接通过浏览器本地文件协议（`file:///`）启动。
+* **🚀 面向多网页卡片的渲染优化**：
+  - **双层点阵**：基础点阵仅在视角稳定后重绘；鼠标附近使用固定 `320 × 320` 的局部弹性场，缩放不会增减点阵数量。
+  - **输入合帧**：滚轮与鼠标移动事件通过 `requestAnimationFrame` 合并，同一帧只提交一次视图更新。
+  - **合成线程 Focus 动画**：F / ESC 镜头移动使用 Web Animations API 驱动 `transform`，主线程只提交起点和终点；动画中暂停点阵重绘，并临时隐藏非目标 Page 的 iframe 像素层。
+  - **可中断状态同步**：Focus 动画被拖拽、ESC 或下一次 Focus 打断时，会从当前合成矩阵继续，不会回跳；`will-change` 仅在动画期间启用并及时释放。
 * **🧠 墓碑式后台内存挂起（Apple-like Tombstone Memory Saver）**：
   - **原生 IntersectionObserver 驱动**：使用浏览器原生、高性能的可见性观察器，当网页卡片滑出视口（加 300px 缓冲边缘）且**持续时间满 30 秒**时，自动释放并移除对应的 `<iframe>` 节点，使页面开销降为零。
-  - **白名单支持（White-list）**：支持在 [WhiteList.json](file:///d:/Desktop/NEW/free-canvas/memory-manage/WhiteList.json) 中添加白名单域名，加入白名单的网页（例如需要保持持续监控的仪表盘）在任何时候均不会被冷冻挂起。
+  - **白名单支持（White-list）**：支持在 [`memory-manage/WhiteList.json`](memory-manage/WhiteList.json) 中添加白名单域名，加入白名单的网页（例如需要保持持续监控的仪表盘）不会被离屏释放。
   - **平滑无感还原**：当冷冻的网页重新滑入视口时，先展示加载占位标志，iframe 重建加载成功后通过 CSS 过滤动画平滑淡出，保障操作无感恢复。
-* **🛡️ 网页深度冻结与隔离（Freeze Mode）**：
-  - 网页组件默认处于**冻结状态**，覆盖着一层柔和的毛玻璃磨砂遮罩，阻断所有滚动和点击干扰，保障画布自由拖拽和缩放的连贯性。
+* **🛡️ 网页冻结与隔离（Freeze Mode）**：
+  - 网页组件默认处于**冻结状态**，使用常驻的半透明输入遮罩阻断滚动和点击；遮罩切换不卸载 iframe，也不使用大面积实时模糊。
   - 遮罩中心配有浮动 pill 标识：`🔒 按下 F 键 解冻组件`，给用户极致清晰的交互暗示。
-* **🎯 浏览器激活模式（Browser Mode）**：
-  - 鼠标悬浮在卡片上按下 **F 键**，组件瞬间解冻（遮罩消退，网页原彩呈现，释放鼠标与键盘交互），同时视角平滑推近居中，输入栏与 Go 按钮解锁。
-  - 按下 **ESC 键**一键退出聚焦，页面重新安全冻结。
-  - **无键位重叠**：F 键仅用于进入，ESC 仅用于退出，完美避免在嵌套网页表单中输入字母 `f` / `F` 导致意外退出浏览器的 Bug！
+* **🎯 统一卡片聚焦（Focus Manager）**：
+  - Note、Page、Image、Excel 等卡片共用同一套 Focus 状态机；鼠标悬浮后按 **F**，视角平滑居中，Page 卡片会额外解锁 iframe、地址栏和导航按钮。
+  - 按下 **ESC** 同时退出卡片编辑态与 Focus，并恢复进入 Focus 前的画布视角；iframe 内的 ESC 由扩展转发给外层画布。
+  - 左右拖动、缩放或中途切换卡片会先同步当前动画位置，不会误触发退出动画，也不会残留 Focus 状态。
+  - 左上角状态灯显示当前画布是否处于 Focus 状态。
 * **🛠️ DOM 静态化（拖动不刷新）**：
   - 弃用了会导致 DOM 重挂载的 `appendChild` 置顶操作，改为全 CSS 驱动的 Z-Index 递增调度层。
   - 无论在画布上怎么拖动移动、拉伸缩放，**卡片内的 iframe 网页绝对不会刷新**，完美保护表单数据和浏览进度。
@@ -57,11 +60,15 @@ free-canvas/
 │   └── main-world-patches.js    # 主执行域原生 window.open / history API 劫持脚本
 ├── ui/                          # 前端 UI 与视图交互层（纯静态解耦）
 │   ├── index.html               # 空间画板主入口网页
-│   ├── canvas.css               # 无限视口、浮动控制栏与网格背景样式
-│   ├── canvas.js                # 无限画布 Pan/Zoom 计算、双击新建与拖放导入分流
-│   ├── cards.css                # Note、Image、Excel、Page 样式、四手柄缩放与 LED 指示小圆点
-│   ├── cards.js                 # 各类卡片的 DOM 生成与实体行为驱动（拖拽/拉伸）
-│   └── focus-manager.js         # 全局 F / ESC 聚焦状态机管理器
+│   ├── canvas/                  # 无限画布模块
+│   │   ├── canvas.css           # 无限视口、浮动控制栏与网格背景样式
+│   │   └── canvas.js            # Pan/Zoom、双击新建与拖放导入分流
+│   ├── card/                    # 卡片模块
+│   │   ├── cards.css            # Note、Image、Excel、Page 与缩放手柄样式
+│   │   └── cards.js             # 各类卡片 DOM 与实体行为驱动
+│   └── focus-manage/            # 全局聚焦状态模块
+│       ├── focus-manager.css    # 聚焦指示灯与卡片聚焦视觉状态
+│       └── focus-manager.js     # F / ESC 聚焦状态机管理器
 └── memory-manage/               # 独立内存管理与域白名单控制
     ├── WhiteList.json           # 域白名单配置文件（写入防止被挂起的域名）
     ├── WhiteList.runtime.js     # 内存管理器运行时加载的白名单数据

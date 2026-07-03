@@ -1,4 +1,4 @@
-// cards.js
+// card/cards.js
 // Dedicated Module for Card Creation, Loader Helpers, Dragging and Resizing Systems
 
 // Globals shared across scripts
@@ -6,9 +6,11 @@ var cardIdCounter = 0;
 var cardsList = [];
 
 var activeDragCard = null;
+var activeDragCardData = null;
 var cardDragOffset = { x: 0, y: 0 };
 
 var activeResizeCard = null;
+var activeResizeCardData = null;
 var resizeDirection = null;
 var resizeStart = { clientX: 0, clientY: 0, width: 0, height: 0, x: 0, y: 0 };
 var maxZIndex = 10;
@@ -16,6 +18,37 @@ var maxZIndex = 10;
 function bringToFront(cardElement) {
   maxZIndex += 1;
   cardElement.style.zIndex = maxZIndex;
+}
+
+function removeCard(card, onRemove = null) {
+  releaseCardFromFocusManager(card);
+
+  card.element.style.transform = "scale(0.8)";
+  card.element.style.opacity = "0";
+  setTimeout(() => {
+    if (typeof onRemove === "function") onRemove();
+    card.element.remove();
+    cardsList = cardsList.filter(item => item !== card);
+  }, 200);
+}
+
+function mountCard(card, options = {}) {
+  const cardElement = card.element;
+  registerFocusableCard(card);
+
+  cardElement.addEventListener("mousedown", () => {
+    bringToFront(cardElement);
+  });
+  cardElement.querySelector(".card-close").addEventListener("click", event => {
+    event.stopPropagation();
+    removeCard(card, options.onRemove);
+  });
+
+  enableCardDragging(card);
+  enableCardResizing(card);
+  world.appendChild(cardElement);
+  cardsList.push(card);
+  bringToFront(cardElement);
 }
 
 // Entrance zoom and slide animation for newly created cards
@@ -53,50 +86,15 @@ function createCard(title, content, x = 0, y = 0, tag = "Note") {
     <div class="card-header">
       <div class="header-left">
         <span class="page-mode-indicator"></span>
-        <h3 contenteditable="false" spellcheck="false" placeholder="卡片标题">${title}</h3>
+        <h3 data-focus-editable contenteditable="false" spellcheck="false" placeholder="卡片标题">${title}</h3>
       </div>
       <button class="card-close" title="删除卡片">×</button>
     </div>
-    <p contenteditable="false" spellcheck="false" placeholder="在此输入卡片内容...">${content}</p>
+    <p data-focus-editable contenteditable="false" spellcheck="false" placeholder="在此输入卡片内容...">${content}</p>
   `;
   
   const cardObj = { id, type: "note", title, content, x, y, width, height, element: cardElement };
   
-  cardElement.addEventListener("mouseenter", () => {
-    hoveredCard = cardObj;
-  });
-  
-  cardElement.addEventListener("mouseleave", () => {
-    if (hoveredCard === cardObj) hoveredCard = null;
-  });
-  
-  cardElement.addEventListener("mousedown", () => {
-    bringToFront(cardElement);
-  });
-  
-  enableCardDragging(cardObj);
-  enableCardResizing(cardObj);
-  
-  cardElement.querySelector(".card-close").addEventListener("click", () => {
-    if (focusedCard === cardObj) {
-      exitActiveFocus();
-    }
-    if (hoveredCard === cardObj) {
-      hoveredCard = null;
-    }
-    cardElement.style.transform = "scale(0.8)";
-    cardElement.style.opacity = "0";
-    setTimeout(() => {
-      cardElement.remove();
-      cardsList = cardsList.filter(c => c.id !== id);
-    }, 200);
-  });
-  
-  cardElement.addEventListener("mouseup", () => {
-    cardObj.x = parseFloat(cardElement.style.left);
-    cardObj.y = parseFloat(cardElement.style.top);
-  });
-
   const titleEl = cardElement.querySelector("h3");
   const descEl = cardElement.querySelector("p");
   
@@ -115,10 +113,7 @@ function createCard(title, content, x = 0, y = 0, tag = "Note") {
     if (event.key !== "Escape") event.stopPropagation();
   });
 
-  world.appendChild(cardElement);
-  cardsList.push(cardObj);
-  
-  bringToFront(cardElement);
+  mountCard(cardObj);
   
   return cardObj;
 }
@@ -146,8 +141,8 @@ function createPageCard(x = 0, y = 0, initialUrl = "", displayName = "") {
       <span class="page-mode-indicator"></span>
       <button class="page-nav-btn page-btn-back" title="后退" disabled>←</button>
       <button class="page-nav-btn page-btn-refresh" title="刷新">↻</button>
-      <input type="text" class="page-input" placeholder="输入网址 (如 google.com) 或拖入本地 HTML" value="${displayVal}">
-      <button class="page-btn page-btn-load" title="载入网页">Go</button>
+      <input data-focus-control type="text" class="page-input" placeholder="输入网址 (如 google.com) 或拖入本地 HTML" value="${displayVal}">
+      <button data-focus-control class="page-btn page-btn-load" title="载入网页">Go</button>
       <button class="card-close" title="删除卡片">×</button>
     </div>
     <div class="iframe-wrapper">
@@ -197,18 +192,6 @@ function createPageCard(x = 0, y = 0, initialUrl = "", displayName = "") {
     historyIndex: initialUrl ? 0 : -1
   };
   
-  cardElement.addEventListener("mouseenter", () => {
-    hoveredCard = cardObj;
-  });
-  
-  cardElement.addEventListener("mouseleave", () => {
-    if (hoveredCard === cardObj) hoveredCard = null;
-  });
-  
-  cardElement.addEventListener("mousedown", () => {
-    bringToFront(cardElement);
-  });
-  
   // Wire up back & refresh buttons
   backBtn.addEventListener("click", () => {
     if (cardObj.iframeEl && cardObj.historyIndex > 0) {
@@ -221,9 +204,6 @@ function createPageCard(x = 0, y = 0, initialUrl = "", displayName = "") {
       cardObj.iframeEl.contentWindow.postMessage({ source: "SPACE_PAGE_CONTROL", action: "refresh" }, "*");
     }
   });
-  
-  enableCardDragging(cardObj);
-  enableCardResizing(cardObj);
   
   function loadUrl() {
     let url = inputEl.dataset.actualUrl || inputEl.value.trim();
@@ -317,38 +297,17 @@ function createPageCard(x = 0, y = 0, initialUrl = "", displayName = "") {
     if (event.key !== "Escape") event.stopPropagation();
   });
   
-  cardElement.querySelector(".card-close").addEventListener("click", () => {
-    if (focusedCard === cardObj) {
-      exitActiveFocus();
-    }
-    if (hoveredCard === cardObj) {
-      hoveredCard = null;
-    }
-    
-    cardElement.style.transform = "scale(0.8)";
-    cardElement.style.opacity = "0";
-    setTimeout(() => {
+  mountCard(cardObj, {
+    onRemove: () => {
       unregisterPageCardMemory(cardObj);
       if (cardObj.objectUrl) {
         URL.revokeObjectURL(cardObj.objectUrl);
         cardObj.objectUrl = null;
       }
       destroyPageCardIframe(cardObj);
-      cardElement.remove();
-      cardsList = cardsList.filter(c => c.id !== id);
-    }, 200);
+    }
   });
-  
-  cardElement.addEventListener("mouseup", () => {
-    cardObj.x = parseFloat(cardElement.style.left);
-    cardObj.y = parseFloat(cardElement.style.top);
-  });
-
-  world.appendChild(cardElement);
-  cardsList.push(cardObj);
   registerPageCardMemory(cardObj);
-  
-  bringToFront(cardElement);
   
   if (initialUrl) {
     loadUrl();
@@ -382,45 +341,7 @@ function createImageCard(src, x = 0, y = 0, width = 400, height = 300) {
   
   const cardObj = { id, type: "image", src, x, y, width, height, element: cardElement };
   
-  cardElement.addEventListener("mouseenter", () => {
-    hoveredCard = cardObj;
-  });
-  
-  cardElement.addEventListener("mouseleave", () => {
-    if (hoveredCard === cardObj) hoveredCard = null;
-  });
-  
-  cardElement.addEventListener("mousedown", () => {
-    bringToFront(cardElement);
-  });
-  
-  enableCardDragging(cardObj);
-  enableCardResizing(cardObj);
-  
-  cardElement.querySelector(".card-close").addEventListener("click", () => {
-    if (focusedCard === cardObj) {
-      exitActiveFocus();
-    }
-    if (hoveredCard === cardObj) {
-      hoveredCard = null;
-    }
-    cardElement.style.transform = "scale(0.8)";
-    cardElement.style.opacity = "0";
-    setTimeout(() => {
-      cardElement.remove();
-      cardsList = cardsList.filter(c => c.id !== id);
-    }, 200);
-  });
-  
-  cardElement.addEventListener("mouseup", () => {
-    cardObj.x = parseFloat(cardElement.style.left);
-    cardObj.y = parseFloat(cardElement.style.top);
-  });
-
-  world.appendChild(cardElement);
-  cardsList.push(cardObj);
-  
-  bringToFront(cardElement);
+  mountCard(cardObj);
   
   return cardObj;
 }
@@ -455,45 +376,7 @@ function createExcelCard(sheetName, html, x = 0, y = 0, width = 600, height = 40
   
   const cardObj = { id, type: "excel", sheetName, html, x, y, width, height, element: cardElement };
   
-  cardElement.addEventListener("mouseenter", () => {
-    hoveredCard = cardObj;
-  });
-  
-  cardElement.addEventListener("mouseleave", () => {
-    if (hoveredCard === cardObj) hoveredCard = null;
-  });
-  
-  cardElement.addEventListener("mousedown", () => {
-    bringToFront(cardElement);
-  });
-  
-  enableCardDragging(cardObj);
-  enableCardResizing(cardObj);
-  
-  cardElement.querySelector(".card-close").addEventListener("click", () => {
-    if (focusedCard === cardObj) {
-      exitActiveFocus();
-    }
-    if (hoveredCard === cardObj) {
-      hoveredCard = null;
-    }
-    cardElement.style.transform = "scale(0.8)";
-    cardElement.style.opacity = "0";
-    setTimeout(() => {
-      cardElement.remove();
-      cardsList = cardsList.filter(c => c.id !== id);
-    }, 200);
-  });
-  
-  cardElement.addEventListener("mouseup", () => {
-    cardObj.x = parseFloat(cardElement.style.left);
-    cardObj.y = parseFloat(cardElement.style.top);
-  });
-
-  world.appendChild(cardElement);
-  cardsList.push(cardObj);
-  
-  bringToFront(cardElement);
+  mountCard(cardObj);
   
   return cardObj;
 }
@@ -516,8 +399,10 @@ function enableCardDragging(cardObj) {
   dragHandle.addEventListener("mousedown", event => {
     if (event.button !== 0) return; // only left click
     event.stopPropagation();
+    prepareCardManipulation(cardObj);
     
     activeDragCard = cardElement;
+    activeDragCardData = cardObj;
     cardElement.classList.add("dragging");
     viewport.classList.add("dragging-card");
     setPageIframeInteractionShield(true);
@@ -545,8 +430,10 @@ function enableCardResizing(cardObj) {
       if (event.button !== 0) return; // only left click
       event.stopPropagation();
       event.preventDefault();
+      prepareCardManipulation(cardObj);
       
       activeResizeCard = cardElement;
+      activeResizeCardData = cardObj;
       resizeDirection = dir;
       
       bringToFront(cardElement);

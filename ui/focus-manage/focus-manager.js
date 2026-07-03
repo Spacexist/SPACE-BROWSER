@@ -1,4 +1,4 @@
-// focus-manager.js
+// focus-manage/focus-manager.js
 // Dedicated Module for Canvas Card Focus and Browser Mode (F / ESC) State Machine
 
 // DOM Selectors
@@ -21,14 +21,67 @@ function showToast(message, isError = false) {
   toastTimer = setTimeout(() => toast.classList.remove("is-visible"), 3000);
 }
 
-// Shared globals across scripts
+// `focusedCard` is the only focus source of truth. CSS and the canvas status
+// indicator are synchronized directly instead of observing DOM mutations.
 var hoveredCard = null;
 var focusedCard = null;
 var preFocusView = null;
-var focusModePhase = "idle";
 var focusTransitionToken = 0;
-var pendingIframeFocusTimer = 0;
 var pageIframeInteractionShielded = false;
+var focusViewTransitionCard = null;
+
+const canvasFocusStatus = $("#canvas-focus-status");
+
+function syncCanvasFocusStatus() {
+  if (!canvasFocusStatus) return;
+
+  const isFocused = Boolean(focusedCard);
+  const label = isFocused ? "画布已聚焦" : "画布未聚焦";
+  canvasFocusStatus.classList.toggle("is-focused", isFocused);
+  canvasFocusStatus.setAttribute("aria-label", label);
+  canvasFocusStatus.title = label;
+}
+
+function setFocusedCard(card) {
+  focusedCard = card || null;
+  syncCanvasFocusStatus();
+}
+
+function beginFocusViewTransition(card) {
+  finishFocusViewTransition();
+  if (!card || !card.element) return;
+
+  focusViewTransitionCard = card;
+  card.element.classList.add("focus-transition-card");
+  viewport.classList.add("focus-view-transition");
+}
+
+function finishFocusViewTransition(card = null) {
+  if (card && focusViewTransitionCard !== card) return;
+
+  if (focusViewTransitionCard && focusViewTransitionCard.element) {
+    focusViewTransitionCard.element.classList.remove("focus-transition-card");
+  }
+  focusViewTransitionCard = null;
+  viewport.classList.remove("focus-view-transition");
+}
+
+function registerFocusableCard(card) {
+  if (!card || !card.element) return;
+
+  card.element.addEventListener("mouseenter", () => {
+    hoveredCard = card;
+  });
+  card.element.addEventListener("mouseleave", () => {
+    if (hoveredCard === card) hoveredCard = null;
+  });
+}
+
+function releaseCardFromFocusManager(card) {
+  if (!card) return false;
+  if (hoveredCard === card) hoveredCard = null;
+  return focusedCard === card ? exitActiveFocus() : false;
+}
 
 function syncPageIframeCover(cardElement) {
   if (!cardElement || !cardElement.classList.contains("page-card")) return;
@@ -48,18 +101,13 @@ function setPageIframeInteractionShield(active) {
   document.querySelectorAll(".card-item.page-card").forEach(syncPageIframeCover);
 }
 
-function cancelPendingIframeFocus() {
-  if (!pendingIframeFocusTimer) return;
-  clearTimeout(pendingIframeFocusTimer);
-  pendingIframeFocusTimer = 0;
-}
-
 function cancelPendingFocusRestore(preserveOrigin = false) {
-  if (focusModePhase !== "restoring") return false;
+  // A stored origin with no active card means the restore animation is active
+  // (or was interrupted). No second phase variable is needed.
+  if (focusedCard || !preFocusView) return false;
 
   focusTransitionToken += 1;
   cancelViewAnimation();
-  focusModePhase = "idle";
 
   if (!preserveOrigin) {
     preFocusView = null;
@@ -68,50 +116,85 @@ function cancelPendingFocusRestore(preserveOrigin = false) {
   return true;
 }
 
-function prepareFocusTransition() {
-  if (focusModePhase === "restoring") {
-    cancelPendingFocusRestore(true);
-  } else {
+function interruptFocusViewTransition(preserveOrigin = false) {
+  if (!cancelPendingFocusRestore(preserveOrigin)) {
     cancelViewAnimation();
   }
+  finishFocusViewTransition();
+}
+
+function prepareFocusTransition() {
+  interruptFocusViewTransition(true);
 
   if (!preFocusView) {
     preFocusView = { x: view.x, y: view.y, zoom: view.zoom };
   }
-
-  focusModePhase = "focused";
 }
 
-function restorePreFocusView() {
+function getFocusViewAnimationOptions() {
+  const loadedPageCount = document.querySelectorAll(
+    ".card-item.page-card.has-iframe"
+  ).length;
+  return {
+    deferGrid: true,
+    compositor: true,
+    duration: loadedPageCount > 1 ? 220 : 300
+  };
+}
+
+function restorePreFocusView(onComplete = null) {
   if (!preFocusView) {
-    focusModePhase = "idle";
+    if (typeof onComplete === "function") onComplete();
     return;
   }
 
   const restoreView = preFocusView;
   const transitionToken = ++focusTransitionToken;
-  focusModePhase = "restoring";
 
-  animateViewTo(restoreView.x, restoreView.y, restoreView.zoom, () => {
-    if (transitionToken !== focusTransitionToken || focusedCard) {
-      return;
-    }
+  animateViewTo(
+    restoreView.x,
+    restoreView.y,
+    restoreView.zoom,
+    () => {
+      if (transitionToken !== focusTransitionToken || focusedCard) {
+        return;
+      }
 
-    preFocusView = null;
-    focusModePhase = "idle";
+      preFocusView = null;
+      if (typeof onComplete === "function") onComplete();
+    },
+    getFocusViewAnimationOptions()
+  );
+}
+
+function setCardEditingEnabled(card, enabled) {
+  card.element.querySelectorAll("[data-focus-editable]").forEach(element => {
+    element.contentEditable = enabled ? "true" : "false";
   });
+  card.element.querySelectorAll("[data-focus-control]").forEach(element => {
+    element.disabled = !enabled;
+  });
+}
+
+function releaseDocumentFocus(card = null) {
+  const activeElement = document.activeElement;
+  const canRelease = activeElement && (!card ||
+    (card.element && card.element.contains(activeElement)));
+  if (canRelease &&
+      typeof activeElement.blur === "function") {
+    activeElement.blur();
+  }
+  window.focus();
+}
+
+function prepareCardManipulation(card) {
+  releaseDocumentFocus(card);
+  interruptFocusViewTransition();
 }
 
 function activateCard(card) {
   card.element.classList.add("focused-card");
-
-  if (card.type === "note") {
-    const titleEl = card.element.querySelector("h3");
-    const descEl = card.element.querySelector("p");
-    if (titleEl) titleEl.contentEditable = "true";
-    if (descEl) descEl.contentEditable = "true";
-    return;
-  }
+  setCardEditingEnabled(card, true);
 
   if (card.type !== "page") return;
 
@@ -120,53 +203,25 @@ function activateCard(card) {
   }
   card.element.classList.add("interactive");
   syncPageIframeCover(card.element);
-
-  const inputEl = card.element.querySelector(".page-input");
-  const loadBtn = card.element.querySelector(".page-btn-load");
-
-  if (inputEl) inputEl.disabled = false;
-  if (loadBtn) loadBtn.disabled = false;
 }
 
 function deactivateCard(card) {
   if (!card || !card.element) return;
 
+  releaseDocumentFocus(card);
+  setCardEditingEnabled(card, false);
   card.element.classList.remove("focused-card", "interactive");
-
-  if (card.type === "note") {
-    const titleEl = card.element.querySelector("h3");
-    const descEl = card.element.querySelector("p");
-    if (titleEl) {
-      titleEl.contentEditable = "false";
-      if (document.activeElement === titleEl) titleEl.blur();
-    }
-    if (descEl) {
-      descEl.contentEditable = "false";
-      if (document.activeElement === descEl) descEl.blur();
-    }
-    return;
-  }
-
-  if (card.type !== "page") return;
-
-  syncPageIframeCover(card.element);
-
-  const inputEl = card.element.querySelector(".page-input");
-  const loadBtn = card.element.querySelector(".page-btn-load");
-
-  if (inputEl) inputEl.disabled = true;
-  if (loadBtn) loadBtn.disabled = true;
+  if (card.type === "page") syncPageIframeCover(card.element);
 }
 
-function releaseDocumentFocus() {
-  if (document.activeElement && typeof document.activeElement.blur === "function") {
-    document.activeElement.blur();
+function reevaluateCardMemory(card) {
+  if (typeof reevaluatePageCardMemory === "function") {
+    reevaluatePageCardMemory(card);
   }
-  window.focus();
 }
 
 // Center any card in the viewport.
-function focusCard(card, isSmooth = true) {
+function centerCardInViewport(card, isSmooth = true, onComplete = null) {
   if (!card || !card.element) return;
 
   const rect = viewport.getBoundingClientRect();
@@ -205,12 +260,19 @@ function focusCard(card, isSmooth = true) {
   }
 
   if (isSmooth) {
-    animateViewTo(targetX, targetY, targetZoom);
+    animateViewTo(
+      targetX,
+      targetY,
+      targetZoom,
+      onComplete,
+      getFocusViewAnimationOptions()
+    );
   } else {
     view.zoom = targetZoom;
     view.x = targetX;
     view.y = targetY;
     updateView();
+    if (typeof onComplete === "function") onComplete();
   }
 }
 
@@ -218,33 +280,24 @@ function focusCard(card, isSmooth = true) {
 function enterCardFocus(card) {
   if (!card || !card.element) return false;
 
-  cancelPendingIframeFocus();
-
   if (focusedCard && focusedCard !== card) {
     const previousCard = focusedCard;
     deactivateCard(previousCard);
-    focusedCard = null;
-    if (typeof reevaluatePageCardMemory === "function") {
-      reevaluatePageCardMemory(previousCard);
-    }
+    setFocusedCard(null);
+    reevaluateCardMemory(previousCard);
   }
 
   prepareFocusTransition();
-  focusedCard = card;
+  setFocusedCard(card);
   activateCard(card);
-  focusCard(card, true);
-
-  if (card.type === "page") {
-    const iframeEl = card.element.querySelector(".page-iframe");
-    if (iframeEl) {
-      pendingIframeFocusTimer = setTimeout(() => {
-        pendingIframeFocusTimer = 0;
-        if (focusedCard === card && focusModePhase === "focused") {
-          iframeEl.focus();
-        }
-      }, 150);
-    }
-  }
+  beginFocusViewTransition(card);
+  centerCardInViewport(card, true, () => {
+    finishFocusViewTransition(card);
+    if (focusedCard !== card || card.type !== "page") return;
+    const iframeElement = card.iframeEl ||
+      card.element.querySelector(".page-iframe");
+    if (iframeElement) iframeElement.focus();
+  });
 
   return true;
 }
@@ -254,14 +307,11 @@ function exitActiveFocus() {
   if (!focusedCard) return false;
 
   const card = focusedCard;
-  cancelPendingIframeFocus();
+  beginFocusViewTransition(card);
   deactivateCard(card);
-  focusedCard = null;
-  if (typeof reevaluatePageCardMemory === "function") {
-    reevaluatePageCardMemory(card);
-  }
-  releaseDocumentFocus();
-  restorePreFocusView();
+  setFocusedCard(null);
+  reevaluateCardMemory(card);
+  restorePreFocusView(() => finishFocusViewTransition(card));
   return true;
 }
 
@@ -305,3 +355,5 @@ window.addEventListener("message", event => {
     exitActiveFocus();
   }
 });
+
+syncCanvasFocusStatus();
