@@ -86,11 +86,11 @@ function createCard(title, content, x = 0, y = 0, tag = "Note") {
     <div class="card-header">
       <div class="header-left">
         <span class="page-mode-indicator"></span>
-        <h3 data-focus-editable contenteditable="false" spellcheck="false" placeholder="卡片标题">${title}</h3>
+        <h3 data-focus-editable contenteditable="true" spellcheck="false" placeholder="卡片标题">${title}</h3>
       </div>
       <button class="card-close" title="删除卡片">×</button>
     </div>
-    <p data-focus-editable contenteditable="false" spellcheck="false" placeholder="在此输入卡片内容...">${content}</p>
+    <p data-focus-editable contenteditable="true" spellcheck="false" placeholder="在此输入卡片内容...">${content}</p>
   `;
   
   const cardObj = { id, type: "note", title, content, x, y, width, height, element: cardElement };
@@ -127,7 +127,7 @@ function createPageCard(x = 0, y = 0, initialUrl = "", displayName = "") {
   const height = 800;
   
   const cardElement = document.createElement("div");
-  cardElement.className = "card-item page-card";
+  cardElement.className = "card-item page-card interactive";
   cardElement.dataset.id = id;
   cardElement.style.left = `${x}px`;
   cardElement.style.top = `${y}px`;
@@ -152,11 +152,7 @@ function createPageCard(x = 0, y = 0, initialUrl = "", displayName = "") {
           注：推荐使用本地 HTML 组件、图片与表格。
         </span>
       </div>
-      <div class="iframe-cover">
-        <div class="iframe-freeze-indicator">
-          <span>🔒 按下 F 键 解冻组件</span>
-        </div>
-      </div>
+      <div class="iframe-cover"></div>
     </div>
   `;
   
@@ -171,9 +167,9 @@ function createPageCard(x = 0, y = 0, initialUrl = "", displayName = "") {
     inputEl.dataset.actualUrl = initialUrl;
   }
   
-  // Start locked: disable address bar inputs by default
-  inputEl.disabled = true;
-  loadBtn.disabled = true;
+  // Start unlocked: address bar inputs are enabled by default
+  inputEl.disabled = false;
+  loadBtn.disabled = false;
   
   const cardObj = { 
     id, 

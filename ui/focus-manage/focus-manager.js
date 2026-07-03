@@ -66,11 +66,32 @@ function finishFocusViewTransition(card = null) {
   viewport.classList.remove("focus-view-transition");
 }
 
+// Track mouse position globally for real-time card detection under pointer
+let lastMouseX = 0;
+let lastMouseY = 0;
+window.addEventListener("mousemove", event => {
+  lastMouseX = event.clientX;
+  lastMouseY = event.clientY;
+});
+
+function getCardAtPointer(clientX, clientY) {
+  const element = document.elementFromPoint(clientX, clientY);
+  if (!element) return null;
+  const cardElement = element.closest(".card-item");
+  if (!cardElement) return null;
+  const cardId = parseInt(cardElement.dataset.id);
+  return cardsList.find(c => c.id === cardId);
+}
+
 function registerFocusableCard(card) {
   if (!card || !card.element) return;
 
   card.element.addEventListener("mouseenter", () => {
     hoveredCard = card;
+    // If keyboard focus is lost inside an iframe, restore it to the parent window
+    if (document.activeElement && document.activeElement.tagName === "IFRAME") {
+      window.focus();
+    }
   });
   card.element.addEventListener("mouseleave", () => {
     if (hoveredCard === card) hoveredCard = null;
@@ -168,11 +189,12 @@ function restorePreFocusView(onComplete = null) {
 }
 
 function setCardEditingEnabled(card, enabled) {
+  // Always keep editable and controls enabled
   card.element.querySelectorAll("[data-focus-editable]").forEach(element => {
-    element.contentEditable = enabled ? "true" : "false";
+    element.contentEditable = "true";
   });
   card.element.querySelectorAll("[data-focus-control]").forEach(element => {
-    element.disabled = !enabled;
+    element.disabled = false;
   });
 }
 
@@ -194,24 +216,18 @@ function prepareCardManipulation(card) {
 
 function activateCard(card) {
   card.element.classList.add("focused-card");
-  setCardEditingEnabled(card, true);
 
   if (card.type !== "page") return;
 
   if (typeof wakePageCardIframe === "function") {
     wakePageCardIframe(card);
   }
-  card.element.classList.add("interactive");
-  syncPageIframeCover(card.element);
 }
 
 function deactivateCard(card) {
   if (!card || !card.element) return;
 
-  releaseDocumentFocus(card);
-  setCardEditingEnabled(card, false);
-  card.element.classList.remove("focused-card", "interactive");
-  if (card.type === "page") syncPageIframeCover(card.element);
+  card.element.classList.remove("focused-card");
 }
 
 function reevaluateCardMemory(card) {
@@ -302,57 +318,27 @@ function enterCardFocus(card) {
   return true;
 }
 
-// Exit focus mode for a card
+// Exit focus mode for a card (Disabled: focus no longer manages exit modules)
 function exitActiveFocus() {
-  if (!focusedCard) return false;
-
-  const card = focusedCard;
-  beginFocusViewTransition(card);
-  deactivateCard(card);
-  setFocusedCard(null);
-  reevaluateCardMemory(card);
-  restorePreFocusView(() => finishFocusViewTransition(card));
-  return true;
+  return false;
 }
 
-// Keyboard shortcuts (F / Escape)
+// Keyboard shortcuts (Control/Ctrl for Focus)
 window.addEventListener("keydown", event => {
-  const activeElement = document.activeElement;
-  const isInputActive = activeElement && (
-    ["INPUT", "TEXTAREA"].includes(activeElement.tagName) ||
-    activeElement.isContentEditable
-  );
-  const focusTarget = hoveredCard || focusedCard;
-
   if (
-    (event.key === "f" || event.key === "F") &&
-    !isInputActive &&
-    !event.repeat &&
-    focusTarget
+    (event.key === "Control" || event.key === "Ctrl" || event.code === "ControlLeft" || event.code === "ControlRight") &&
+    !event.repeat
   ) {
-    event.preventDefault();
-    enterCardFocus(focusTarget);
-  }
+    const activeElement = document.activeElement;
+    const isInputActive = activeElement && (
+      ["INPUT", "TEXTAREA"].includes(activeElement.tagName) ||
+      activeElement.isContentEditable
+    );
+    const focusTarget = getCardAtPointer(lastMouseX, lastMouseY) || focusedCard;
 
-  if (
-    event.key === "Escape" ||
-    event.code === "Escape" ||
-    event.keyCode === 27
-  ) {
-    if (exitActiveFocus()) {
-      event.preventDefault();
+    if (!isInputActive && focusTarget) {
+      enterCardFocus(focusTarget);
     }
-  }
-});
-
-// Escape from an embedded page iframe
-window.addEventListener("message", event => {
-  if (!event.data || event.data.source !== "SPACE_ESCAPE_PRESSED") return;
-  if (!focusedCard || focusedCard.type !== "page") return;
-
-  const iframeEl = focusedCard.element.querySelector(".page-iframe");
-  if (iframeEl && event.source === iframeEl.contentWindow) {
-    exitActiveFocus();
   }
 });
 

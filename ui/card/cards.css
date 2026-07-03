@@ -296,6 +296,7 @@
   opacity: 0;
   pointer-events: none !important;
   cursor: default;
+  transition: none !important; /* Disable transition to prevent dark flashing when shield is removed */
 }
 
 /* Show cover when card is frozen and has loaded an iframe */
@@ -348,16 +349,7 @@
   backdrop-filter: none !important;
 }
 
-/* During a focus camera move, composite only the target page surface. */
-#viewport.focus-view-transition
-  .card-item.page-card:not(.focus-transition-card) .page-iframe {
-  visibility: hidden;
-}
 
-#viewport.focus-view-transition
-  .card-item.page-card:not(.focus-transition-card) .iframe-wrapper {
-  background: #141414;
-}
 
 .iframe-cover.canvas-input-shield .iframe-freeze-indicator {
   display: none !important;
