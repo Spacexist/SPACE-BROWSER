@@ -458,8 +458,8 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #15803d; /* Dim green when idle */
-  opacity: 0.5;
+  background: #22c55e; /* Brighter green when idle */
+  opacity: 0.85; /* Clearly visible on dark backgrounds */
   transition: all 0.25s ease;
   user-select: none;
   display: inline-block;
@@ -468,21 +468,22 @@
 
 /* Light up green dot with glow when the card is focused */
 .card-item.focused-card .page-mode-indicator {
-  background: #4ade80; /* Bright green when focused */
+  background: #4ade80; /* Bright glowing green when focused */
   opacity: 1;
   box-shadow: 0 0 8px #4ade80, 0 0 3px #4ade80;
 }
 
 /* Page Card without loaded iframe (empty state) -> Yellow dot */
 .card-item.page-card:not(.has-iframe) .page-mode-indicator {
-  background: #a16207; /* Dim yellow when idle */
+  background: #eab308; /* Brighter yellow when idle */
+  opacity: 0.85; /* Clearly visible on dark backgrounds */
   box-shadow: none;
 }
 
 .card-item.page-card:not(.has-iframe).focused-card .page-mode-indicator {
-  background: #eab308; /* Bright yellow when focused */
+  background: #facc15; /* Bright glowing yellow when focused */
   opacity: 1;
-  box-shadow: 0 0 8px #eab308, 0 0 3px #eab308;
+  box-shadow: 0 0 8px #facc15, 0 0 3px #facc15;
 }
 
 /* Bottom iPhone Drag Handle */
