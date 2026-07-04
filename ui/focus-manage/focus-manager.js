@@ -72,6 +72,7 @@ let lastMouseY = 0;
 window.addEventListener("mousemove", event => {
   lastMouseX = event.clientX;
   lastMouseY = event.clientY;
+  releaseStalePageIframeShield();
 });
 
 function getCardAtPointer(clientX, clientY) {
@@ -110,9 +111,18 @@ function syncPageIframeCover(cardElement) {
   const coverEl = cardElement.querySelector(".iframe-cover");
   if (!coverEl) return;
 
+  const interactionActive = Boolean(
+    panning || activeDragCard || activeResizeCard
+  );
   const needsInputShield = pageIframeInteractionShielded &&
+    interactionActive &&
     cardElement.classList.contains("interactive");
   coverEl.classList.toggle("canvas-input-shield", needsInputShield);
+}
+
+function clearAllPageIframeShields() {
+  document.querySelectorAll(".card-item.page-card .iframe-cover.canvas-input-shield")
+    .forEach(coverEl => coverEl.classList.remove("canvas-input-shield"));
 }
 
 // Focus Manager owns the iframe interaction boundary. Canvas movement only
@@ -120,6 +130,16 @@ function syncPageIframeCover(cardElement) {
 function setPageIframeInteractionShield(active) {
   pageIframeInteractionShielded = Boolean(active);
   document.querySelectorAll(".card-item.page-card").forEach(syncPageIframeCover);
+}
+
+function releaseStalePageIframeShield() {
+  if (panning || activeDragCard || activeResizeCard) return;
+  pageIframeInteractionShielded = false;
+  clearAllPageIframeShields();
+  if (viewport) {
+    viewport.classList.toggle("panning", Boolean(panning));
+    viewport.classList.toggle("dragging-card", Boolean(activeDragCard || activeResizeCard));
+  }
 }
 
 function cancelPendingFocusRestore(preserveOrigin = false) {
@@ -244,7 +264,10 @@ function centerCardInViewport(card, isSmooth = true, onComplete = null) {
   const viewportWidth = rect.width;
   const viewportHeight = rect.height;
   const geometry = getCardWorldGeometry(card);
-  if (!geometry) return;
+  const focusGeometry = typeof getCardFocusWorldGeometry === "function"
+    ? (getCardFocusWorldGeometry(card) || geometry)
+    : geometry;
+  if (!geometry || !focusGeometry) return;
   const cardWidth = geometry.width;
   const cardHeight = geometry.height;
   const isPage = card.type === "page";
@@ -262,10 +285,13 @@ function centerCardInViewport(card, isSmooth = true, onComplete = null) {
   const targetZoom = isPage && Math.abs(fittedZoom - 1) <= 0.12
     ? 1
     : fittedZoom;
-  // Exact invariant: viewport center === transformed card center.
-  // Do not pixel-snap the top-left; that introduces a measurable center drift.
-  const targetX = viewportWidth / 2 - geometry.centerX * targetZoom;
-  const targetY = viewportHeight / 2 - geometry.centerY * targetZoom;
+  // Focus should align to the visible viewport center, not the outer browser
+  // window center. That avoids bias from host tabs/bookmarks and lets page
+  // cards center by their actual content area instead of the whole shell.
+  const anchorX = viewportWidth / 2;
+  const anchorY = viewportHeight / 2;
+  const targetX = anchorX - focusGeometry.centerX * targetZoom;
+  const targetY = anchorY - focusGeometry.centerY * targetZoom;
 
   if (isSmooth) {
     animateViewTo(
@@ -287,6 +313,8 @@ function centerCardInViewport(card, isSmooth = true, onComplete = null) {
 // Enter focus mode for a card
 function enterCardFocus(card) {
   if (!card || !card.element) return false;
+
+  releaseDocumentFocus();
 
   if (focusedCard && focusedCard !== card) {
     const previousCard = focusedCard;
@@ -321,16 +349,19 @@ window.addEventListener("keydown", event => {
     (event.key === "Control" || event.key === "Ctrl" || event.code === "ControlLeft" || event.code === "ControlRight") &&
     !event.repeat
   ) {
-    const activeElement = document.activeElement;
-    const isInputActive = activeElement && (
-      ["INPUT", "TEXTAREA"].includes(activeElement.tagName) ||
-      activeElement.isContentEditable
-    );
     const focusTarget = getCardAtPointer(lastMouseX, lastMouseY) || focusedCard;
 
-    if (!isInputActive && focusTarget) {
+    if (focusTarget) {
       enterCardFocus(focusTarget);
     }
+  }
+});
+
+window.addEventListener("mouseup", releaseStalePageIframeShield, true);
+window.addEventListener("blur", releaseStalePageIframeShield);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    releaseStalePageIframeShield();
   }
 });
 

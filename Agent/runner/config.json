@@ -1,0 +1,10 @@
+{
+  "backend": "cdp",
+  "endpoint": "http://127.0.0.1:17373",
+  "connectOnStartup": false,
+  "session": {
+    "debugUrl": "http://127.0.0.1:9222",
+    "targetUrlIncludes": "",
+    "targetTitleIncludes": ""
+  }
+}

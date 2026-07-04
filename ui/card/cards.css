@@ -341,7 +341,8 @@
 }
 
 /* Focus Manager adds this only to interactive iframes during canvas movement. */
-.card-item.page-card.interactive .iframe-cover.canvas-input-shield {
+#viewport.panning .card-item.page-card.interactive .iframe-cover.canvas-input-shield,
+#viewport.dragging-card .card-item.page-card.interactive .iframe-cover.canvas-input-shield {
   opacity: 1 !important;
   pointer-events: auto !important;
   cursor: grabbing !important;

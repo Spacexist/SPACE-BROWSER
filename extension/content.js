@@ -1,4 +1,111 @@
 (function() {
+  let heldTargetInfo = null;
+
+  function isFormControl(target) {
+    return Boolean(target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
+  }
+
+  function resolveTargetAtPoint(clientX, clientY) {
+    const target = document.elementFromPoint(clientX, clientY) ||
+      document.body ||
+      document.documentElement;
+    return target ? {
+      target,
+      client: { x: clientX, y: clientY }
+    } : null;
+  }
+
+  function resolveClickableElement(target) {
+    if (!target || typeof target.closest !== "function") return target;
+    return target.closest([
+      "[data-focus-control]",
+      "button",
+      "a[href]",
+      "label",
+      "summary",
+      'input[type="button"]',
+      'input[type="submit"]',
+      'input[type="checkbox"]',
+      'input[type="radio"]'
+    ].join(", ")) || target;
+  }
+
+  function dispatchMouse(targetInfo, type, options = {}) {
+    if (!targetInfo || !targetInfo.target) return false;
+    targetInfo.target.dispatchEvent(new MouseEvent(type, {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      clientX: targetInfo.client.x,
+      clientY: targetInfo.client.y,
+      button: Number(options.button) || 0,
+      buttons: type === "mouseup" || type === "click" ? 0 : 1
+    }));
+    return true;
+  }
+
+  function focusEditableTarget(targetInfo) {
+    if (!targetInfo || !targetInfo.target) return false;
+    const target = targetInfo.target;
+
+    if (isFormControl(target)) {
+      if (typeof target.focus === "function") {
+        target.focus({ preventScroll: true });
+      }
+      return true;
+    }
+
+    if (!target.isContentEditable) return false;
+    if (typeof target.focus === "function") {
+      target.focus({ preventScroll: true });
+    }
+
+    try {
+      if (typeof document.caretPositionFromPoint === "function") {
+        const caret = document.caretPositionFromPoint(targetInfo.client.x, targetInfo.client.y);
+        if (caret && window.getSelection) {
+          const range = document.createRange();
+          range.setStart(caret.offsetNode, caret.offset);
+          range.collapse(true);
+          const selection = window.getSelection();
+          selection.removeAllRanges();
+          selection.addRange(range);
+          return true;
+        }
+      }
+
+      if (typeof document.caretRangeFromPoint === "function") {
+        const range = document.caretRangeFromPoint(targetInfo.client.x, targetInfo.client.y);
+        if (range && window.getSelection) {
+          const selection = window.getSelection();
+          selection.removeAllRanges();
+          selection.addRange(range);
+          return true;
+        }
+      }
+    } catch (e) {
+      return true;
+    }
+
+    return true;
+  }
+
+  function performSemanticClick(targetInfo) {
+    if (!targetInfo || !targetInfo.target) return false;
+    if (focusEditableTarget(targetInfo)) return true;
+
+    const clickable = resolveClickableElement(targetInfo.target);
+    if (clickable && typeof clickable.click === "function") {
+      clickable.click();
+      return true;
+    }
+
+    return dispatchMouse({
+      ...targetInfo,
+      target: clickable || targetInfo.target
+    }, "click");
+  }
+
   // Helper to send navigation info to the parent Canvas window
   function reportNavigation() {
     try {
@@ -90,6 +197,31 @@
         window.history.back();
       } else if (action === "refresh") {
         window.location.reload();
+      } else if (action === "agent_click") {
+        const targetInfo = resolveTargetAtPoint(
+          Number(event.data.clientX),
+          Number(event.data.clientY)
+        );
+        if (targetInfo) {
+          dispatchMouse(targetInfo, "mousedown", event.data);
+          dispatchMouse(targetInfo, "mouseup", event.data);
+          performSemanticClick(targetInfo);
+        }
+      } else if (action === "agent_hold") {
+        const targetInfo = resolveTargetAtPoint(
+          Number(event.data.clientX),
+          Number(event.data.clientY)
+        );
+        if (targetInfo) {
+          dispatchMouse(targetInfo, "mousedown", event.data);
+          focusEditableTarget(targetInfo);
+          heldTargetInfo = targetInfo;
+        }
+      } else if (action === "agent_release") {
+        if (heldTargetInfo) {
+          dispatchMouse(heldTargetInfo, "mouseup", event.data);
+          heldTargetInfo = null;
+        }
       }
     } else if (event.data && event.data.source === "SPACE_INTERNAL_NAV") {
       // Handle SPA navigation reported from the main world

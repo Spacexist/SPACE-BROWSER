@@ -1,8 +1,6 @@
 // canvas/canvas.js
 // Dedicated Module for Canvas Infinite Viewport, Zooming/Panning, Dot-grid, and File Drops
 
-// Viewport state shared globally
-var view = { x: 0, y: 0, zoom: 1 };
 var gridFrame = 0;
 var gridPointer = {
   x: -10000,
@@ -20,7 +18,6 @@ var dotGridEffect = document.getElementById("dot-grid-effect");
 var renderedGridView = null;
 var gridRefreshTimer = 0;
 var gridViewMotionActive = false;
-var viewportBounds = null;
 var pointerMoveFrame = 0;
 var latestPointerPosition = { clientX: -10000, clientY: -10000 };
 var wheelFrame = 0;
@@ -30,30 +27,6 @@ const DOT_GRID_CACHE_PADDING = 128;
 const DOT_GRID_EFFECT_SIZE = 320;
 const DOT_GRID_EFFECT_RADIUS = 140;
 const DOT_GRID_SETTLE_DELAY = 80;
-
-function refreshViewportBounds() {
-  const rect = viewport.getBoundingClientRect();
-  viewportBounds = {
-    left: rect.left,
-    top: rect.top,
-    width: rect.width,
-    height: rect.height
-  };
-  return viewportBounds;
-}
-
-function getViewportBounds() {
-  return viewportBounds || refreshViewportBounds();
-}
-
-// Coordinate Conversion
-function screenToWorld(clientX, clientY) {
-  const rect = getViewportBounds();
-  return {
-    x: (clientX - rect.left - view.x) / view.zoom,
-    y: (clientY - rect.top - view.y) / view.zoom
-  };
-}
 
 // Reset/Fit View
 var viewAnimation = null;
@@ -555,7 +528,7 @@ function applyPendingPointerMove() {
   
   // Dragging card
   if (activeDragCard && activeDragCardData) {
-    const worldMouse = screenToWorld(clientX, clientY);
+    const worldMouse = clientToWorld(clientX, clientY);
     const cardObj = activeDragCardData;
     
     if (cardObj) {
@@ -710,7 +683,7 @@ function resetView() {
 }
 
 function addNewCardAt(clientX, clientY) {
-  const worldCenter = screenToWorld(clientX, clientY);
+  const worldCenter = clientToWorld(clientX, clientY);
   
   const card = createCard(
     "动态创建的想法", 
@@ -734,7 +707,7 @@ function addNewCard() {
 }
 
 function addNewPageAt(clientX, clientY) {
-  const worldCenter = screenToWorld(clientX, clientY);
+  const worldCenter = clientToWorld(clientX, clientY);
   
   const card = createPageCard(
     Math.round(worldCenter.x - 600), 
@@ -758,29 +731,23 @@ function addNewPage() {
 // Toolbar controls hookups
 $("#btn-zoom-in").addEventListener("click", () => {
   interruptFocusViewTransition();
-  const rect = viewport.getBoundingClientRect();
-  const centerX = rect.width / 2;
-  const centerY = rect.height / 2;
-  const worldX = (centerX - view.x) / view.zoom;
-  const worldY = (centerY - view.y) / view.zoom;
+  const center = getViewportCenterScreen();
+  const worldCenter = screenToWorld(center.x, center.y);
   
   view.zoom = Math.min(8, view.zoom * 1.3);
-  view.x = centerX - worldX * view.zoom;
-  view.y = centerY - worldY * view.zoom;
+  view.x = center.x - worldCenter.x * view.zoom;
+  view.y = center.y - worldCenter.y * view.zoom;
   updateView();
 });
 
 $("#btn-zoom-out").addEventListener("click", () => {
   interruptFocusViewTransition();
-  const rect = viewport.getBoundingClientRect();
-  const centerX = rect.width / 2;
-  const centerY = rect.height / 2;
-  const worldX = (centerX - view.x) / view.zoom;
-  const worldY = (centerY - view.y) / view.zoom;
+  const center = getViewportCenterScreen();
+  const worldCenter = screenToWorld(center.x, center.y);
   
   view.zoom = Math.max(0.04, view.zoom / 1.3);
-  view.x = centerX - worldX * view.zoom;
-  view.y = centerY - worldY * view.zoom;
+  view.x = center.x - worldCenter.x * view.zoom;
+  view.y = center.y - worldCenter.y * view.zoom;
   updateView();
 });
 
@@ -793,8 +760,8 @@ $("#btn-add-image").addEventListener("click", () => {
 $("#image-loader").addEventListener("change", event => {
   const file = event.target.files[0];
   if (file) {
-    const rect = viewport.getBoundingClientRect();
-    const worldCenter = screenToWorld(rect.width / 2, rect.height / 2);
+    const center = getViewportCenterScreen();
+    const worldCenter = screenToWorld(center.x, center.y);
     if (file.type.startsWith("image/")) {
       handleImageFile(file, worldCenter.x, worldCenter.y);
     } else if (file.name.toLowerCase().endsWith(".xlsx") || file.name.toLowerCase().endsWith(".xls")) {
@@ -815,7 +782,7 @@ viewport.addEventListener("drop", event => {
   const files = event.dataTransfer.files;
   if (files.length > 0) {
     const file = files[0];
-    const worldPos = screenToWorld(event.clientX, event.clientY);
+    const worldPos = clientToWorld(event.clientX, event.clientY);
     if (file.type.startsWith("image/")) {
       handleImageFile(file, worldPos.x, worldPos.y);
     } else if (file.name.toLowerCase().endsWith(".xlsx") || file.name.toLowerCase().endsWith(".xls")) {
@@ -831,7 +798,7 @@ viewport.addEventListener("drop", event => {
 // Double-click viewport to spawn a card at pointer position
 viewport.addEventListener("dblclick", event => {
   if (event.target.closest(".card-item") || event.target.closest(".floating-toolbar")) return;
-  const worldPos = screenToWorld(event.clientX, event.clientY);
+  const worldPos = clientToWorld(event.clientX, event.clientY);
   const card = createCard(
     "双击创建的想法",
     "可以在此处记录临时想法。支持拖动和内容实时修改。",

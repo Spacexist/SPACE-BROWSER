@@ -1,0 +1,31 @@
+{
+  "move": {
+    "duration": 520,
+    "steps": 28,
+    "margin": 96,
+    "follow": true,
+    "followDuration": 260
+  },
+  "click": {
+    "holdMs": 40
+  },
+  "drag": {
+    "holdMs": 70,
+    "duration": 760,
+    "steps": 34,
+    "follow": true,
+    "margin": 96
+  },
+  "zoom": {
+    "duration": 220,
+    "factor": 1.3,
+    "min": 0.04,
+    "max": 8
+  },
+  "scroll": {
+    "deltaY": 480
+  },
+  "runner": {
+    "backend": "dom"
+  }
+}

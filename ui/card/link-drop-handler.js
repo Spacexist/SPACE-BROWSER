@@ -45,8 +45,8 @@
       let worldX = event.clientX;
       let worldY = event.clientY;
 
-      if (typeof screenToWorld === "function") {
-        const worldPos = screenToWorld(event.clientX, event.clientY);
+      if (typeof clientToWorld === "function") {
+        const worldPos = clientToWorld(event.clientX, event.clientY);
         worldX = worldPos.x;
         worldY = worldPos.y;
       }
