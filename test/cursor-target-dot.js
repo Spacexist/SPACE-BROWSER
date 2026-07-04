@@ -74,11 +74,12 @@
 
     const dot = ensureDot();
     const screen = worldToScreen(target.physical.x, target.physical.y);
+    const viewportPoint = worldToViewport(target.physical.x, target.physical.y);
     target.screen = screen;
     target.client = screenToClient(screen.x, screen.y);
     dot.hidden = false;
     dot.style.transform =
-      `translate3d(${Math.round(screen.x)}px, ${Math.round(screen.y)}px, 0)`;
+      `translate3d(${Math.round(viewportPoint.x)}px, ${Math.round(viewportPoint.y)}px, 0)`;
 
     if (labelEl) {
       labelEl.hidden = false;
@@ -87,11 +88,11 @@
         `S ${formatCoordinate(target.screen.x)}, ${formatCoordinate(target.screen.y)}`;
       const viewportRect = viewport.getBoundingClientRect();
       const labelX = Math.min(
-        Math.max(8, screen.x + 18),
+        Math.max(8, viewportPoint.x + 18),
         Math.max(8, viewportRect.width - labelEl.offsetWidth - 8)
       );
       const labelY = Math.min(
-        Math.max(8, screen.y - labelEl.offsetHeight - 12),
+        Math.max(8, viewportPoint.y - labelEl.offsetHeight - 12),
         Math.max(8, viewportRect.height - labelEl.offsetHeight - 8)
       );
       labelEl.style.transform =

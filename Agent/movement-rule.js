@@ -58,10 +58,10 @@
 
   function getPhysicalScreenPoint(point) {
     if (!point || point.space !== "physical") return null;
-    if (typeof worldToScreen !== "function") {
-      throw new Error("worldToScreen() is not loaded");
+    if (typeof worldToViewport !== "function") {
+      throw new Error("worldToViewport() is not loaded");
     }
-    return worldToScreen(Number(point.x), Number(point.y));
+    return worldToViewport(Number(point.x), Number(point.y));
   }
 
   function isScreenPointVisible(screenPoint, options = {}) {

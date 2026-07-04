@@ -128,8 +128,9 @@
       visibleIds.add(card.id);
       const label = getLabel(card);
       const cardRect = card.element.getBoundingClientRect();
-      const screenX = cardRect.left - viewportRect.left;
-      const screenY = cardRect.top - viewportRect.top;
+      const viewportX = cardRect.left - viewportRect.left;
+      const viewportY = cardRect.top - viewportRect.top;
+      const screenPoint = clientToScreen(cardRect.left, cardRect.top);
       const onScreen = cardRect.right >= viewportRect.left &&
         cardRect.left <= viewportRect.right &&
         cardRect.bottom >= viewportRect.top &&
@@ -141,8 +142,8 @@
       label.textContent =
         `#${card.id} ${card.type.toUpperCase()}  ` +
         `P ${formatCoordinate(geometry.x)}, ${formatCoordinate(geometry.y)}  ·  ` +
-        `S ${formatCoordinate(screenX)}, ${formatCoordinate(screenY)}`;
-      const labelX = Math.max(6, screenX + 10);
+        `S ${formatCoordinate(screenPoint.x)}, ${formatCoordinate(screenPoint.y)}`;
+      const labelX = Math.max(6, viewportX + 10);
       const labelY = Math.max(6, cardRect.bottom - viewportRect.top - label.offsetHeight - 9);
       label.style.transform =
         `translate3d(${Math.round(labelX)}px, ${Math.round(labelY)}px, 0)`;
@@ -156,19 +157,20 @@
       cardLabels.delete(cardId);
     });
 
-    const pointerScreenX = pointerClientX - viewportRect.left;
-    const pointerScreenY = pointerClientY - viewportRect.top;
+    const pointerViewportX = pointerClientX - viewportRect.left;
+    const pointerViewportY = pointerClientY - viewportRect.top;
+    const pointerScreen = clientToScreen(pointerClientX, pointerClientY);
     const pointerWorld = clientToWorld(pointerClientX, pointerClientY);
     mouseLabel.textContent =
       `MOUSE  P ${formatCoordinate(pointerWorld.x)}, ${formatCoordinate(pointerWorld.y)}  ·  ` +
-      `S ${formatCoordinate(pointerScreenX)}, ${formatCoordinate(pointerScreenY)}`;
+      `S ${formatCoordinate(pointerScreen.x)}, ${formatCoordinate(pointerScreen.y)}`;
 
     const mouseX = Math.min(
-      Math.max(8, pointerScreenX + 14),
+      Math.max(8, pointerViewportX + 14),
       Math.max(8, viewportRect.width - mouseLabel.offsetWidth - 8)
     );
     const mouseY = Math.min(
-      Math.max(8, pointerScreenY + 16),
+      Math.max(8, pointerViewportY + 16),
       Math.max(8, viewportRect.height - mouseLabel.offsetHeight - 8)
     );
     mouseLabel.style.transform =
@@ -226,8 +228,7 @@
   window.getCoordinateDebugState = () => ({
     enabled,
     mouseScreen: {
-      x: pointerClientX - viewport.getBoundingClientRect().left,
-      y: pointerClientY - viewport.getBoundingClientRect().top
+      ...clientToScreen(pointerClientX, pointerClientY)
     },
     mouseWorld: clientToWorld(pointerClientX, pointerClientY),
     view: { x: view.x, y: view.y, zoom: view.zoom }

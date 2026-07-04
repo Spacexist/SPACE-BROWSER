@@ -63,6 +63,17 @@
     };
   }
 
+  function getDesktopPoint() {
+    const state = getCursorState();
+    if (!state.points || !state.points.screen) {
+      throw new Error("Cursor screen point is not available");
+    }
+    if (typeof screenToDesktop === "function") {
+      return screenToDesktop(state.points.screen.x, state.points.screen.y);
+    }
+    throw new Error("screenToDesktop() is not loaded");
+  }
+
   function resolveCursorPoint(point) {
     if (!point || typeof point !== "object") {
       throw new Error("Cursor point must be an object: { space, x, y }");
@@ -256,8 +267,8 @@
         space: "physical",
         x: Number(point.x),
         y: Number(point.y),
-        clientX: screenToClient(followPlan.anchor.x, followPlan.anchor.y).x,
-        clientY: screenToClient(followPlan.anchor.x, followPlan.anchor.y).y
+        clientX: viewportToClient(followPlan.anchor.x, followPlan.anchor.y).x,
+        clientY: viewportToClient(followPlan.anchor.x, followPlan.anchor.y).y
       }
       : resolveCursorPoint(point);
     let follow = followPlan;
@@ -289,6 +300,7 @@
   const api = {
     set: setCursorState,
     get: getCursorState,
+    getDesktopPoint,
     resolve: resolveCursorPoint,
     move: moveTo,
     moveTo,

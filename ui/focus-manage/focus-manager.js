@@ -260,9 +260,12 @@ function reevaluateCardMemory(card) {
 function centerCardInViewport(card, isSmooth = true, onComplete = null) {
   if (!card || !card.element) return;
 
+  const focusViewport = typeof getFocusViewportMetrics === "function"
+    ? getFocusViewportMetrics()
+    : null;
   const rect = viewport.getBoundingClientRect();
-  const viewportWidth = rect.width;
-  const viewportHeight = rect.height;
+  const viewportWidth = focusViewport ? focusViewport.viewport.width : rect.width;
+  const viewportHeight = focusViewport ? focusViewport.viewport.height : rect.height;
   const geometry = getCardWorldGeometry(card);
   const focusGeometry = typeof getCardFocusWorldGeometry === "function"
     ? (getCardFocusWorldGeometry(card) || geometry)
@@ -285,11 +288,10 @@ function centerCardInViewport(card, isSmooth = true, onComplete = null) {
   const targetZoom = isPage && Math.abs(fittedZoom - 1) <= 0.12
     ? 1
     : fittedZoom;
-  // Focus should align to the visible viewport center, not the outer browser
-  // window center. That avoids bias from host tabs/bookmarks and lets page
-  // cards center by their actual content area instead of the whole shell.
-  const anchorX = viewportWidth / 2;
-  const anchorY = viewportHeight / 2;
+  // Focus uses a dedicated viewport frame. `screen` can carry browser chrome
+  // offsets, but focus should always center inside the visible canvas area.
+  const anchorX = focusViewport ? focusViewport.center.x : viewportWidth / 2;
+  const anchorY = focusViewport ? focusViewport.center.y : viewportHeight / 2;
   const targetX = anchorX - focusGeometry.centerX * targetZoom;
   const targetY = anchorY - focusGeometry.centerY * targetZoom;
 
