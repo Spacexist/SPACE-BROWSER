@@ -709,11 +709,8 @@ function resetView() {
   showToast("已重置画布视角");
 }
 
-function addNewCard() {
-  const rect = viewport.getBoundingClientRect();
-  const centerX = rect.width / 2;
-  const centerY = rect.height / 2;
-  const worldCenter = screenToWorld(centerX, centerY);
+function addNewCardAt(clientX, clientY) {
+  const worldCenter = screenToWorld(clientX, clientY);
   
   const card = createCard(
     "动态创建的想法", 
@@ -725,13 +722,19 @@ function addNewCard() {
   
   animateCardEntrance(card.element);
   enterCardFocus(card);
+  return card;
 }
 
-function addNewPage() {
+function addNewCard() {
   const rect = viewport.getBoundingClientRect();
-  const centerX = rect.width / 2;
-  const centerY = rect.height / 2;
-  const worldCenter = screenToWorld(centerX, centerY);
+  return addNewCardAt(
+    rect.left + rect.width / 2,
+    rect.top + rect.height / 2
+  );
+}
+
+function addNewPageAt(clientX, clientY) {
+  const worldCenter = screenToWorld(clientX, clientY);
   
   const card = createPageCard(
     Math.round(worldCenter.x - 600), 
@@ -741,6 +744,15 @@ function addNewPage() {
   
   animateCardEntrance(card.element);
   enterCardFocus(card);
+  return card;
+}
+
+function addNewPage() {
+  const rect = viewport.getBoundingClientRect();
+  return addNewPageAt(
+    rect.left + rect.width / 2,
+    rect.top + rect.height / 2
+  );
 }
 
 // Toolbar controls hookups
@@ -773,8 +785,6 @@ $("#btn-zoom-out").addEventListener("click", () => {
 });
 
 $("#btn-reset-view").addEventListener("click", resetView);
-$("#btn-add-card").addEventListener("click", addNewCard);
-$("#btn-add-page").addEventListener("click", addNewPage);
 
 $("#btn-add-image").addEventListener("click", () => {
   $("#image-loader").click();
@@ -914,4 +924,77 @@ if (typeof loadCanvasState === "function" && loadCanvasState()) {
       toolbar.classList.toggle("collapsed");
     });
   }
+})();
+
+// Blank-canvas creation menu. Card diagnostics live in card/cards.js.
+(function initializeCanvasContextMenu() {
+  const contextMenu = document.getElementById("canvas-context-menu");
+  if (!contextMenu) return;
+
+  let contextPoint = null;
+
+  function hideContextMenu() {
+    if (contextMenu.hidden) return;
+    contextMenu.hidden = true;
+    contextPoint = null;
+  }
+
+  function showContextMenu(clientX, clientY) {
+    const bounds = viewport.getBoundingClientRect();
+    contextPoint = { clientX, clientY };
+    contextMenu.hidden = false;
+    contextMenu.style.left = "0px";
+    contextMenu.style.top = "0px";
+
+    const margin = 10;
+    const localX = clientX - bounds.left;
+    const localY = clientY - bounds.top;
+    const left = Math.min(
+      Math.max(margin, localX),
+      Math.max(margin, bounds.width - contextMenu.offsetWidth - margin)
+    );
+    const top = Math.min(
+      Math.max(margin, localY),
+      Math.max(margin, bounds.height - contextMenu.offsetHeight - margin)
+    );
+
+    contextMenu.style.left = `${Math.round(left)}px`;
+    contextMenu.style.top = `${Math.round(top)}px`;
+    contextMenu.querySelector(".canvas-context-item")
+      ?.focus({ preventScroll: true });
+  }
+
+  viewport.addEventListener("contextmenu", event => {
+    const blockedTarget = event.target.closest(
+      ".card-item, .floating-toolbar, .tips-panel, .canvas-context-menu"
+    );
+    if (blockedTarget) return;
+
+    event.preventDefault();
+    interruptFocusViewTransition();
+    showContextMenu(event.clientX, event.clientY);
+  });
+
+  contextMenu.addEventListener("mousedown", event => event.stopPropagation());
+  contextMenu.addEventListener("click", event => {
+    const item = event.target.closest("[data-canvas-action]");
+    if (!item || !contextPoint) return;
+
+    const point = contextPoint;
+    const action = item.dataset.canvasAction;
+    hideContextMenu();
+
+    if (action === "new-note") {
+      addNewCardAt(point.clientX, point.clientY);
+    } else if (action === "new-page") {
+      addNewPageAt(point.clientX, point.clientY);
+    }
+  });
+
+  window.addEventListener("mousedown", event => {
+    if (contextMenu.hidden || contextMenu.contains(event.target)) return;
+    hideContextMenu();
+  });
+  viewport.addEventListener("wheel", hideContextMenu, { passive: true });
+  window.addEventListener("resize", hideContextMenu);
 })();

@@ -243,8 +243,10 @@ function centerCardInViewport(card, isSmooth = true, onComplete = null) {
   const rect = viewport.getBoundingClientRect();
   const viewportWidth = rect.width;
   const viewportHeight = rect.height;
-  const cardWidth = card.width || card.element.offsetWidth || 320;
-  const cardHeight = card.height || card.element.offsetHeight || 240;
+  const geometry = getCardWorldGeometry(card);
+  if (!geometry) return;
+  const cardWidth = geometry.width;
+  const cardHeight = geometry.height;
   const isPage = card.type === "page";
   const padding = isPage ? 30 : 100;
   const zoomX = (viewportWidth - padding * 2) / cardWidth;
@@ -260,20 +262,10 @@ function centerCardInViewport(card, isSmooth = true, onComplete = null) {
   const targetZoom = isPage && Math.abs(fittedZoom - 1) <= 0.12
     ? 1
     : fittedZoom;
-  const cardCenterX = card.x + cardWidth / 2;
-  const cardCenterY = card.y + cardHeight / 2;
-  let targetX = viewportWidth / 2 - cardCenterX * targetZoom;
-  let targetY = viewportHeight / 2 - cardCenterY * targetZoom;
-
-  if (isPage) {
-    // Keep the page surface on physical-pixel boundaries. The correction is
-    // sub-pixel sized, so centering remains visually unchanged.
-    const pixelRatio = Math.max(1, window.devicePixelRatio || 1);
-    const screenLeft = card.x * targetZoom + targetX;
-    const screenTop = card.y * targetZoom + targetY;
-    targetX += Math.round(screenLeft * pixelRatio) / pixelRatio - screenLeft;
-    targetY += Math.round(screenTop * pixelRatio) / pixelRatio - screenTop;
-  }
+  // Exact invariant: viewport center === transformed card center.
+  // Do not pixel-snap the top-left; that introduces a measurable center drift.
+  const targetX = viewportWidth / 2 - geometry.centerX * targetZoom;
+  const targetY = viewportHeight / 2 - geometry.centerY * targetZoom;
 
   if (isSmooth) {
     animateViewTo(

@@ -29,12 +29,6 @@
     <!-- Floating Toolbar -->
     <div class="floating-toolbar collapsed" id="floating-toolbar">
       <div class="toolbar-content">
-        <button class="toolbar-btn" id="btn-add-card">
-          <span>+</span>新建想法
-        </button>
-        <button class="toolbar-btn" id="btn-add-page">
-          <span>🌐</span>新建网页
-        </button>
         <button class="toolbar-btn" id="btn-add-image">
           <span>🖼️</span>导入图片/文件
         </button>
@@ -53,6 +47,23 @@
       </button>
     </div>
 
+    <!-- Canvas context menu: creation actions live at the pointer position. -->
+    <div class="canvas-context-menu" id="canvas-context-menu" role="menu" hidden>
+      <div class="canvas-context-title">新建</div>
+      <button class="canvas-context-item" type="button" role="menuitem" data-canvas-action="new-note">
+        <span>想法卡片</span><small>NOTE</small>
+      </button>
+      <button class="canvas-context-item" type="button" role="menuitem" data-canvas-action="new-page">
+        <span>网页卡片</span><small>PAGE</small>
+      </button>
+    </div>
+
+    <!-- Hidden until the //**//** coordinate test sequence is entered. -->
+    <div class="coordinate-debug-layer" id="coordinate-debug-layer" hidden aria-hidden="true">
+      <div class="coordinate-debug-status">2D COORD TEST</div>
+      <div class="mouse-coordinate-label" id="mouse-coordinate-label"></div>
+    </div>
+
     <!-- Interactive Tips Panel -->
     <div class="tips-panel collapsed" id="tips-panel">
       <div class="tips-toggle" id="tips-toggle" title="快捷键与使用帮助">?</div>
@@ -63,6 +74,7 @@
         </div>
         <span><b>左键按住画布 / 中键拖拽 / 空格+左键</b>：平移画布</span>
         <span><b>滚轮滚动</b>：以鼠标指针为中心平滑缩放</span>
+        <span><b>右键画布空白处</b>：新建想法或网页卡片</span>
         <span><b>双击画布空白处</b>：在指针位置新建便签</span>
         <span><b>鼠标移至卡片上并按下 Ctrl 键</b>：聚焦放大该目标</span>
         <span><b>按住卡片主体</b>：拖动以改变其空间坐标</span>

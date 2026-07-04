@@ -236,6 +236,116 @@ html, body {
   margin: 0 4px;
 }
 
+/* Pointer-positioned creation menu. */
+.canvas-context-menu {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 196px;
+  padding: 7px;
+  background: rgba(25, 25, 25, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 13px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
+  z-index: 1200;
+  user-select: none;
+}
+
+.canvas-context-title {
+  padding: 6px 9px 7px;
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+}
+
+.canvas-context-item {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+}
+
+.canvas-context-item:hover,
+.canvas-context-item:focus-visible {
+  color: #101010;
+  background: rgba(255, 255, 255, 0.94);
+  outline: none;
+}
+
+.canvas-context-item small {
+  color: rgba(255, 255, 255, 0.34);
+  font: 9px/1 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  letter-spacing: 0.08em;
+}
+
+.canvas-context-item:hover small,
+.canvas-context-item:focus-visible small {
+  color: rgba(0, 0, 0, 0.45);
+}
+
+/* Screen-space coordinate test layer. Labels remain crisp at every zoom. */
+.coordinate-debug-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 1100;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.coordinate-debug-status {
+  position: absolute;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 10px;
+  color: rgba(200, 255, 218, 0.92);
+  background: rgba(10, 20, 14, 0.86);
+  border: 1px solid rgba(74, 222, 128, 0.28);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.32);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+}
+
+.card-coordinate-label,
+.mouse-coordinate-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  padding: 4px 7px;
+  color: rgba(235, 255, 241, 0.96);
+  background: rgba(8, 13, 10, 0.88);
+  border: 1px solid rgba(74, 222, 128, 0.22);
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.32);
+  font-size: 10px;
+  line-height: 1.25;
+  white-space: nowrap;
+  will-change: transform;
+}
+
+.card-coordinate-label {
+  transform: translate3d(-10000px, -10000px, 0);
+}
+
+.mouse-coordinate-label {
+  color: rgba(255, 255, 255, 0.96);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translate3d(-10000px, -10000px, 0);
+}
+
 @media (max-width: 820px) {
   .floating-toolbar:not(.collapsed) {
     left: 24px;

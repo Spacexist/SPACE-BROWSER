@@ -14,6 +14,36 @@ var activeResizeCardData = null;
 var resizeDirection = null;
 var resizeStart = { clientX: 0, clientY: 0, width: 0, height: 0, x: 0, y: 0 };
 var maxZIndex = 10;
+var scheduleCardCoordinateDebug = () => {};
+
+// Card geometry has one owner. Focus, diagnostics and future card tools must
+// all use this helper instead of independently guessing a card's dimensions.
+function getCardWorldGeometry(card) {
+  if (!card || !card.element) return null;
+
+  const element = card.element;
+  const styleX = parseFloat(element.style.left);
+  const styleY = parseFloat(element.style.top);
+  const styleWidth = parseFloat(element.style.width);
+  const styleHeight = parseFloat(element.style.height);
+  const x = Number.isFinite(styleX) ? styleX : (Number(card.x) || 0);
+  const y = Number.isFinite(styleY) ? styleY : (Number(card.y) || 0);
+  const width = Number.isFinite(styleWidth) && styleWidth > 0
+    ? styleWidth
+    : (element.offsetWidth || Number(card.width) || 320);
+  const height = Number.isFinite(styleHeight) && styleHeight > 0
+    ? styleHeight
+    : (element.offsetHeight || Number(card.height) || 240);
+
+  return {
+    x,
+    y,
+    width,
+    height,
+    centerX: x + width / 2,
+    centerY: y + height / 2
+  };
+}
 
 function bringToFront(cardElement) {
   maxZIndex += 1;
@@ -29,6 +59,7 @@ function removeCard(card, onRemove = null) {
     if (typeof onRemove === "function") onRemove();
     card.element.remove();
     cardsList = cardsList.filter(item => item !== card);
+    scheduleCardCoordinateDebug();
   }, 200);
 }
 
@@ -49,6 +80,7 @@ function mountCard(card, options = {}) {
   world.appendChild(cardElement);
   cardsList.push(card);
   bringToFront(cardElement);
+  scheduleCardCoordinateDebug();
 }
 
 // Entrance zoom and slide animation for newly created cards
@@ -633,3 +665,167 @@ window.addEventListener("keydown", event => {
     saveCanvasState();
   }
 });
+
+// ----------------------------------------------------
+// CARD COORDINATE TEST MODE
+// Type //**//** to toggle. This belongs to the Card module because labels
+// describe card geometry; the layer itself stays in screen space for clarity.
+// ----------------------------------------------------
+(function initializeCardCoordinateDebug() {
+  const debugLayer = document.getElementById("coordinate-debug-layer");
+  const mouseLabel = document.getElementById("mouse-coordinate-label");
+  const debugSequence = "//**//**";
+  const cardLabels = new Map();
+
+  let keyBuffer = "";
+  let enabled = false;
+  let frame = 0;
+  let pointerClientX = 0;
+  let pointerClientY = 0;
+
+  function formatCoordinate(value) {
+    if (!Number.isFinite(value)) return "—";
+    return Math.abs(value) >= 1000
+      ? Math.round(value).toString()
+      : value.toFixed(1);
+  }
+
+  function removeLabels() {
+    cardLabels.forEach(label => label.remove());
+    cardLabels.clear();
+  }
+
+  function getLabel(card) {
+    let label = cardLabels.get(card.id);
+    if (label) return label;
+
+    label = document.createElement("div");
+    label.className = "card-coordinate-label";
+    label.dataset.cardId = card.id;
+    debugLayer.appendChild(label);
+    cardLabels.set(card.id, label);
+    return label;
+  }
+
+  function render() {
+    frame = 0;
+    if (!enabled || !debugLayer || !mouseLabel) return;
+
+    const viewportRect = viewport.getBoundingClientRect();
+    const visibleIds = new Set();
+
+    cardsList.forEach(card => {
+      if (!card || !card.element || !card.element.isConnected) return;
+
+      const geometry = getCardWorldGeometry(card);
+      if (!geometry) return;
+
+      visibleIds.add(card.id);
+      const label = getLabel(card);
+      const cardRect = card.element.getBoundingClientRect();
+      const screenX = cardRect.left - viewportRect.left;
+      const screenY = cardRect.top - viewportRect.top;
+      const onScreen = cardRect.right >= viewportRect.left &&
+        cardRect.left <= viewportRect.right &&
+        cardRect.bottom >= viewportRect.top &&
+        cardRect.top <= viewportRect.bottom;
+
+      label.hidden = !onScreen;
+      if (!onScreen) return;
+
+      label.textContent =
+        `#${card.id} ${card.type.toUpperCase()}  ` +
+        `W ${formatCoordinate(geometry.x)}, ${formatCoordinate(geometry.y)}  ·  ` +
+        `S ${formatCoordinate(screenX)}, ${formatCoordinate(screenY)}`;
+      const labelX = Math.max(6, screenX + 10);
+      const labelY = Math.max(6, cardRect.bottom - viewportRect.top - label.offsetHeight - 9);
+      label.style.transform =
+        `translate3d(${Math.round(labelX)}px, ${Math.round(labelY)}px, 0)`;
+    });
+
+    cardLabels.forEach((label, cardId) => {
+      if (visibleIds.has(cardId)) return;
+      label.remove();
+      cardLabels.delete(cardId);
+    });
+
+    const pointerScreenX = pointerClientX - viewportRect.left;
+    const pointerScreenY = pointerClientY - viewportRect.top;
+    const pointerWorld = screenToWorld(pointerClientX, pointerClientY);
+    mouseLabel.textContent =
+      `MOUSE  W ${formatCoordinate(pointerWorld.x)}, ${formatCoordinate(pointerWorld.y)}  ·  ` +
+      `S ${formatCoordinate(pointerScreenX)}, ${formatCoordinate(pointerScreenY)}`;
+
+    const mouseX = Math.min(
+      Math.max(8, pointerScreenX + 14),
+      Math.max(8, viewportRect.width - mouseLabel.offsetWidth - 8)
+    );
+    const mouseY = Math.min(
+      Math.max(8, pointerScreenY + 16),
+      Math.max(8, viewportRect.height - mouseLabel.offsetHeight - 8)
+    );
+    mouseLabel.style.transform =
+      `translate3d(${Math.round(mouseX)}px, ${Math.round(mouseY)}px, 0)`;
+
+    const motionActive = Boolean(
+      panning || activeDragCard || activeResizeCard || viewAnimation ||
+      viewCompositorAnimation || wheelFrame || pointerMoveFrame
+    );
+    if (motionActive) scheduleCardCoordinateDebug();
+  }
+
+  scheduleCardCoordinateDebug = function scheduleCoordinateDebug() {
+    if (!enabled || frame) return;
+    frame = requestAnimationFrame(render);
+  };
+
+  function setEnabled(nextEnabled) {
+    enabled = Boolean(nextEnabled);
+    debugLayer.hidden = !enabled;
+    debugLayer.setAttribute("aria-hidden", String(!enabled));
+
+    if (!enabled) {
+      if (frame) cancelAnimationFrame(frame);
+      frame = 0;
+      removeLabels();
+      mouseLabel.style.transform = "translate3d(-10000px, -10000px, 0)";
+      showToast("二维坐标测试已关闭");
+      return;
+    }
+
+    scheduleCardCoordinateDebug();
+    showToast("二维坐标测试已开启");
+  }
+
+  window.addEventListener("mousemove", event => {
+    pointerClientX = event.clientX;
+    pointerClientY = event.clientY;
+    scheduleCardCoordinateDebug();
+  });
+  window.addEventListener("mouseup", scheduleCardCoordinateDebug);
+  window.addEventListener("click", scheduleCardCoordinateDebug);
+  window.addEventListener("resize", scheduleCardCoordinateDebug);
+
+  window.addEventListener("keydown", event => {
+    if (enabled) scheduleCardCoordinateDebug();
+    if (event.repeat || event.ctrlKey || event.metaKey || event.altKey ||
+        event.key.length !== 1) return;
+
+    keyBuffer = (keyBuffer + event.key).slice(-debugSequence.length);
+    if (keyBuffer !== debugSequence) return;
+
+    keyBuffer = "";
+    setEnabled(!enabled);
+  });
+
+  window.setCoordinateDebugEnabled = setEnabled;
+  window.getCoordinateDebugState = () => ({
+    enabled,
+    mouseScreen: {
+      x: pointerClientX - viewport.getBoundingClientRect().left,
+      y: pointerClientY - viewport.getBoundingClientRect().top
+    },
+    mouseWorld: screenToWorld(pointerClientX, pointerClientY),
+    view: { x: view.x, y: view.y, zoom: view.zoom }
+  });
+})();
